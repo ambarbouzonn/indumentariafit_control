@@ -9,6 +9,7 @@ type View =
   | "sale"
   | "stock"
   | "intake"
+  | "transfers"
   | "reservations"
   | "orders"
   | "products"
@@ -166,6 +167,7 @@ const navItems: { view: View; label: string; symbol: string }[] = [
   { view: "reservations", label: "Reservas", symbol: "◷" },
   { view: "orders", label: "Pedidos", symbol: "□" },
   { view: "intake", label: "Ingresos", symbol: "↓" },
+  { view: "transfers", label: "Transferencias", symbol: "⇄" },
   { view: "products", label: "Productos", symbol: "◇" },
   { view: "movements", label: "Movimientos", symbol: "↔" },
 ];
@@ -209,6 +211,11 @@ export default function Home() {
   const [showStockMessage, setShowStockMessage] = useState(false);
   const [intakeProductId, setIntakeProductId] = useState(initialProducts[0].id);
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
+  const [transferProductId, setTransferProductId] = useState(initialProducts[0].id);
+  const [transferOrigin, setTransferOrigin] = useState("Depósito");
+  const [transferDestination, setTransferDestination] = useState("Local Centro");
+  const [transferStockId, setTransferStockId] = useState("");
+  const [transferQuantity, setTransferQuantity] = useState(1);
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
   const [toast, setToast] = useState("");
@@ -315,7 +322,7 @@ export default function Home() {
       const profileRelation = Array.isArray(rawMovement.profiles) ? rawMovement.profiles[0] : rawMovement.profiles;
       return {
         id: rawMovement.id,
-        type: rawMovement.movement_type === "sale" ? "Venta" : rawMovement.movement_type === "intake" ? "Ingreso" : rawMovement.movement_type,
+        type: rawMovement.movement_type === "sale" ? "Venta" : rawMovement.movement_type === "intake" ? "Ingreso" : rawMovement.movement_type.startsWith("transfer_") ? "Transferencia" : rawMovement.movement_type,
         detail: `${productRelation?.name ?? "Producto"} · ${colorRelation?.name ?? ""} · ${sizeRelation?.name ?? ""} · ${locationRelation?.name ?? ""}`,
         quantity: Number(rawMovement.quantity),
         date: new Date(rawMovement.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
@@ -410,6 +417,9 @@ export default function Home() {
   const currentSaleProduct = products.find((product) => product.id === saleProductId) ?? products[0];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
+  const currentTransferProduct = products.find((product) => product.id === transferProductId) ?? products[0];
+  const transferOriginVariants = currentTransferProduct.variants.filter((variant) => variant.location === transferOrigin);
+  const selectedTransferVariant = transferOriginVariants.find((variant) => variant.stockId === transferStockId);
   const stockLocationVariants = currentStockProduct.variants.filter((variant) => variant.location === location);
   const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
   const stockSizes = [...new Set(stockLocationVariants.map((variant) => variant.size))];
@@ -695,6 +705,45 @@ export default function Home() {
     showToast("Mercadería ingresada correctamente");
   }
 
+  async function confirmTransfer() {
+    if (profileRole !== "admin" && profileRole !== "manager") {
+      showToast("Solo una administradora o encargada puede transferir mercadería");
+      return;
+    }
+    if (!selectedTransferVariant?.stockId || !selectedTransferVariant.variantId) {
+      showToast("Elegí un color y talle");
+      return;
+    }
+    if (transferOrigin === transferDestination) {
+      showToast("El origen y el destino deben ser diferentes");
+      return;
+    }
+    const available = selectedTransferVariant.onHand - selectedTransferVariant.reserved;
+    if (transferQuantity < 1 || transferQuantity > available) {
+      showToast(`Podés transferir entre 1 y ${available} unidades`);
+      return;
+    }
+    const destinationLocationId = products.flatMap((product) => product.variants).find((variant) => variant.location === transferDestination)?.locationId;
+    if (!destinationLocationId) {
+      showToast("No encontramos la ubicación de destino");
+      return;
+    }
+    if (!window.confirm(`¿Transferir ${transferQuantity} unidad${transferQuantity === 1 ? "" : "es"}?\n\n${currentTransferProduct.name}\n${selectedTransferVariant.color} · Talle ${selectedTransferVariant.size}\n${transferOrigin} → ${transferDestination}`)) return;
+    const { error } = await supabase.rpc("transfer_inventory", {
+      p_source_stock_id: selectedTransferVariant.stockId,
+      p_destination_location_id: destinationLocationId,
+      p_quantity: transferQuantity,
+    });
+    if (error) {
+      showToast(error.message.includes("transfer_inventory") ? "Falta ejecutar la actualización SQL de Transferencias" : error.message);
+      return;
+    }
+    setTransferStockId("");
+    setTransferQuantity(1);
+    await loadData();
+    showToast("Transferencia registrada correctamente");
+  }
+
   async function copyMessage() {
     try {
       await navigator.clipboard.writeText(stockMessage);
@@ -867,6 +916,7 @@ export default function Home() {
                   { view: "stock" as View, title: "Consultar stock", detail: "Buscá por talle, color y ubicación", symbol: "⌕" },
                   { view: "orders" as View, title: "Pedidos", detail: "Encargos y señas de clientes", symbol: "□" },
                   { view: "intake" as View, title: "Ingresar mercadería", detail: "Cargá cantidades por variante", symbol: "↓" },
+                  { view: "transfers" as View, title: "Transferir mercadería", detail: "Mové stock entre ubicaciones", symbol: "⇄" },
                   { view: "reservations" as View, title: "Reservas", detail: `${activeReservations.length} activa${activeReservations.length === 1 ? "" : "s"}`, symbol: "◷" },
                   { view: "movements" as View, title: "Movimientos", detail: "Revisá todo lo que cambió", symbol: "↔" },
                 ].map((action) => (
@@ -1032,6 +1082,26 @@ export default function Home() {
                     </article>
                   );
                 })}
+              </div>
+            </section>
+          )}
+
+          {view === "transfers" && (
+            <section className="pageSection">
+              <div className="pageHeading"><div><p className="eyebrow">Movimiento interno</p><h1>Transferir mercadería</h1><p>Mové unidades entre Local, Depósito y Feria sin perder el historial.</p></div></div>
+              <div className="transferCard">
+                <div className="transferRoute">
+                  <label>Desde<select value={transferOrigin} onChange={(event) => { const next = event.target.value; setTransferOrigin(next); if (next === transferDestination) setTransferDestination(locations.find((entry) => entry !== next) ?? ""); setTransferStockId(""); }}>{locations.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+                  <span aria-hidden="true">→</span>
+                  <label>Hacia<select value={transferDestination} onChange={(event) => setTransferDestination(event.target.value)}>{locations.filter((entry) => entry !== transferOrigin).map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+                </div>
+                <div className="transferFields">
+                  <label>Producto<select value={transferProductId} onChange={(event) => { setTransferProductId(event.target.value); setTransferStockId(""); }}>{products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></label>
+                  <label>Color y talle<select value={transferStockId} onChange={(event) => setTransferStockId(event.target.value)}><option value="">Elegir variante</option>{transferOriginVariants.map((variant) => { const available = variant.onHand - variant.reserved; return <option value={variant.stockId} key={variant.stockId} disabled={available <= 0}>{variant.color} · Talle {variant.size} · {available} disponible{available === 1 ? "" : "s"}</option>; })}</select></label>
+                  <label>Cantidad<input type="number" min="1" max={Math.max(1, (selectedTransferVariant?.onHand ?? 0) - (selectedTransferVariant?.reserved ?? 0))} inputMode="numeric" value={transferQuantity} onChange={(event) => setTransferQuantity(Math.max(1, Math.floor(Number(event.target.value))))} /></label>
+                </div>
+                {selectedTransferVariant ? <div className="transferAvailability"><span>Disponible para mover</span><strong>{selectedTransferVariant.onHand - selectedTransferVariant.reserved}</strong><small>{selectedTransferVariant.onHand} físico · {selectedTransferVariant.reserved} reservado</small></div> : <div className="transferHint">Elegí una variante para ver cuántas unidades podés mover.</div>}
+                <div className="transferFooter"><p>Al confirmar se descuenta del origen y se suma al destino inmediatamente.</p><button className="primaryButton fit" disabled={!selectedTransferVariant || transferQuantity > selectedTransferVariant.onHand - selectedTransferVariant.reserved} onClick={confirmTransfer}>Revisar y transferir</button></div>
               </div>
             </section>
           )}
