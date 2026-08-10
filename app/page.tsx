@@ -210,6 +210,10 @@ const navItems: { view: View; label: string; symbol: string }[] = [
   { view: "movements", label: "Movimientos", symbol: "↔" },
 ];
 
+const mobileNavItems = navItems.filter((item) =>
+  (["home", "sale", "stock", "products", "orders"] as View[]).includes(item.view),
+);
+
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", {
     style: "currency",
@@ -1129,6 +1133,7 @@ export default function Home() {
                   { view: "orders" as View, title: "Pedidos", detail: "Encargos y señas de clientes", symbol: "□" },
                   { view: "intake" as View, title: "Ingresar mercadería", detail: "Cargá cantidades por variante", symbol: "↓" },
                   { view: "transfers" as View, title: "Transferir mercadería", detail: "Mové stock entre ubicaciones", symbol: "⇄" },
+                  { view: "products" as View, title: "Productos", detail: "Creá, editá o eliminá productos", symbol: "◇" },
                   { view: "reservations" as View, title: "Reservas", detail: `${activeReservations.length} activa${activeReservations.length === 1 ? "" : "s"}`, symbol: "◷" },
                   { view: "movements" as View, title: "Movimientos", detail: "Revisá todo lo que cambió", symbol: "↔" },
                 ].map((action) => (
@@ -1381,7 +1386,7 @@ export default function Home() {
       </div>
 
       <nav className="mobileNav" aria-label="Navegación móvil">
-        {navItems.slice(0, 5).map((item) => (
+        {mobileNavItems.map((item) => (
           <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => navigate(item.view)}><span aria-hidden="true">{item.symbol}</span>{item.label}</button>
         ))}
       </nav>
