@@ -443,6 +443,57 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .productStock strong { font-size: 21px; }
 .productStock em { margin-top: 4px; color: var(--warning); font-size: 10px; font-style: normal; }
 
+.stockExplorer { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+.stockProductPicker, .stockDetail { border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: var(--shadow); }
+.stockProductPicker { padding: 15px; }
+.stockPickerTitle { margin: 0 0 11px; color: var(--muted); font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
+.stockProductPicker .productResult { grid-template-columns: auto minmax(0, 1fr); padding: 11px; }
+.stockProductPicker .productStock { grid-column: 2; display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px; text-align: left; }
+.stockProductPicker .productStock strong { font-size: 16px; }
+.stockProductPicker .productStock small, .stockProductPicker .productStock em { margin: 0; }
+.stockProductPicker .productInitial { width: 40px; height: 40px; }
+.stockDetail { min-width: 0; padding: 22px; }
+.stockDetailHeading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.stockDetailHeading h2 { margin: 3px 0 4px; font-size: 26px; }
+.stockDetailHeading p:last-child { margin: 0; color: var(--muted); font-size: 12px; }
+.stockTotals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
+.stockTotals > div { display: grid; gap: 3px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #fafbf8; }
+.stockTotals span { color: var(--muted); font-size: 11px; }
+.stockTotals strong { font-size: 25px; }
+.stockTotals .available { border-color: #a8d4b9; background: var(--green-light); }
+.stockTotals .available strong { color: var(--green-dark); }
+.stockTotals .reserved { border-color: #e6c997; background: #fff6e7; }
+.stockTotals .reserved strong { color: var(--warning); }
+.stockLegend { display: flex; flex-wrap: wrap; gap: 13px; margin-bottom: 10px; color: var(--muted); font-size: 11px; }
+.stockLegend span { display: flex; align-items: center; gap: 5px; }
+.stockLegend i { width: 10px; height: 10px; border-radius: 3px; background: var(--green-light); }
+.stockLegend .legendLow { background: #fff0d7; }
+.stockLegend .legendOut { background: #f0f1ef; }
+.stockMatrixWrap { border: 1px solid var(--line); border-radius: 15px; overflow-x: auto; }
+.stockMatrix { width: 100%; min-width: 580px; border-collapse: collapse; }
+.stockMatrix th, .stockMatrix td { min-width: 112px; padding: 9px; border-right: 1px solid var(--soft-line); border-bottom: 1px solid var(--soft-line); text-align: center; }
+.stockMatrix tr:last-child th, .stockMatrix tr:last-child td { border-bottom: 0; }
+.stockMatrix th:last-child, .stockMatrix td:last-child { border-right: 0; }
+.stockMatrix thead th { background: var(--soft); color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.stockMatrix thead th:first-child { position: sticky; z-index: 2; left: 0; min-width: 155px; text-align: left; }
+.stockMatrix tbody th { position: sticky; z-index: 1; left: 0; display: flex; align-items: center; gap: 8px; min-width: 155px; height: 83px; background: white; text-align: left; font-size: 12px; }
+.stockMatrix tbody th .colorDot { flex: 0 0 auto; width: 29px; height: 29px; }
+.stockCell { min-height: 64px; display: grid; place-items: center; align-content: center; padding: 7px; border-radius: 11px; background: var(--green-light); }
+.stockCell strong { color: var(--green-dark); font-size: 25px; line-height: 1; }
+.stockCell span { margin-top: 4px; color: #426653; font-size: 9px; text-transform: uppercase; }
+.stockCell small { margin-top: 3px; color: var(--warning); font-size: 9px; font-weight: 700; }
+.stockCell.low { background: #fff0d7; }
+.stockCell.low strong { color: var(--warning); }
+.stockCell.out { background: #f0f1ef; }
+.stockCell.out strong, .stockCell.out span { color: #929a94; }
+.stockUnavailable { color: #bac0bb; }
+.stockMessagePanel { margin-top: 18px; padding: 18px; border: 1px solid #d7cdb9; border-radius: 15px; background: #f7f2e8; }
+.stockMessagePanel h3 { margin: 2px 0 13px; font-size: 18px; }
+.stockMessageOptions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; }
+.stockMessageOptions > label:first-child { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.stockMessageOptions select { min-height: 40px; padding: 0 28px 0 10px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+.stockMessagePanel .messagePreview { min-height: 110px; background: white; }
+
 .messageCard { position: sticky; top: 102px; }
 .inlineFields { margin: 20px 0 13px; }
 .inlineFields label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
@@ -553,6 +604,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .quickActions, .catalogGrid { grid-template-columns: repeat(2, 1fr); }
   .saleLayout, .stockLayout { grid-template-columns: 1fr; }
   .checkoutCard, .messageCard { position: static; }
+  .stockExplorer { grid-template-columns: 1fr; }
+  .stockProductPicker .productResults { display: grid; grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 780px) {
@@ -607,6 +660,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .productResult { grid-template-columns: auto 1fr; }
   .productStock { grid-column: 2; display: flex; align-items: baseline; gap: 7px; text-align: left; }
   .productStock strong, .productStock small, .productStock em { display: inline; margin: 0; }
+  .stockProductPicker, .stockDetail { border-radius: 16px; }
+  .stockProductPicker { padding: 12px; }
+  .stockProductPicker .productResults { display: flex; gap: 9px; overflow-x: auto; padding-bottom: 4px; }
+  .stockProductPicker .productResult { flex: 0 0 235px; }
+  .stockDetail { padding: 17px; }
+  .stockDetailHeading { align-items: stretch; flex-direction: column; }
+  .stockDetailHeading .secondaryButton { width: 100%; }
+  .stockTotals { gap: 6px; }
+  .stockTotals > div { padding: 11px 9px; }
+  .stockTotals strong { font-size: 22px; }
+  .stockMatrixWrap { margin-inline: -17px; border-right: 0; border-left: 0; border-radius: 0; }
+  .stockMatrix { min-width: 540px; }
+  .stockMatrix th, .stockMatrix td { min-width: 105px; padding: 7px; }
+  .stockMatrix thead th:first-child, .stockMatrix tbody th { min-width: 135px; }
+  .stockMessagePanel { margin-inline: -5px; padding: 15px; }
   .intakeGridHead, .intakeRow { grid-template-columns: 1fr 105px; padding: 11px; }
   .intakeControls { grid-template-columns: 1fr; }
   .intakeLocation { min-width: 0; }

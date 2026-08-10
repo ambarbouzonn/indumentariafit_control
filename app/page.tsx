@@ -206,6 +206,7 @@ export default function Home() {
   const [messageSize, setMessageSize] = useState("S");
   const [includePrice, setIncludePrice] = useState(true);
   const [showQuantities, setShowQuantities] = useState(false);
+  const [showStockMessage, setShowStockMessage] = useState(false);
   const [intakeProductId, setIntakeProductId] = useState(initialProducts[0].id);
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
@@ -409,6 +410,12 @@ export default function Home() {
   const currentSaleProduct = products.find((product) => product.id === saleProductId) ?? products[0];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
+  const stockLocationVariants = currentStockProduct.variants.filter((variant) => variant.location === location);
+  const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
+  const stockSizes = [...new Set(stockLocationVariants.map((variant) => variant.size))];
+  const stockOnHand = stockLocationVariants.reduce((sum, variant) => sum + variant.onHand, 0);
+  const stockReserved = stockLocationVariants.reduce((sum, variant) => sum + variant.reserved, 0);
+  const stockAvailable = stockOnHand - stockReserved;
   const intakeLocationVariants = currentIntakeProduct.variants.filter((variant) => variant.location === location);
   const intakeColors = [...new Set(intakeLocationVariants.map((variant) => variant.color))];
   const intakeSizes = [...new Set(intakeLocationVariants.map((variant) => variant.size))];
@@ -944,34 +951,48 @@ export default function Home() {
 
           {view === "stock" && (
             <section className="pageSection">
-              <div className="pageHeading"><div><p className="eyebrow">Disponibilidad</p><h1>Consultar stock</h1><p>Buscá productos y armá un mensaje para compartir.</p></div></div>
+              <div className="pageHeading"><div><p className="eyebrow">Disponibilidad</p><h1>Consultar stock</h1><p>Ve todo lo disponible por color y talle.</p></div></div>
               <div className="searchBar"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o código" aria-label="Buscar producto" /></div>
-              <div className="stockLayout">
-                <div className="productResults">
+              <div className="stockExplorer">
+                <aside className="stockProductPicker">
+                  <p className="stockPickerTitle">Elegí un producto</p>
+                  <div className="productResults">
                   {filteredProducts.map((product) => {
                     const variants = product.variants.filter((variant) => variant.location === location);
                     const available = variants.reduce((sum, variant) => sum + Math.max(0, variant.onHand - variant.reserved), 0);
                     const reserved = variants.reduce((sum, variant) => sum + variant.reserved, 0);
                     return (
-                      <button className={`productResult ${stockProductId === product.id ? "selected" : ""}`} key={product.id} onClick={() => setStockProductId(product.id)}>
+                      <button className={`productResult ${stockProductId === product.id ? "selected" : ""}`} key={product.id} onClick={() => { setStockProductId(product.id); setMessageSize(variants[0]?.size ?? "S"); }}>
                         <span className="productInitial">{product.name.slice(0, 2).toUpperCase()}</span>
                         <span className="productResultName"><strong>{product.name}</strong><small>{product.code} · {variants.length} variantes</small></span>
                         <span className="productStock"><strong>{available}</strong><small>disponibles</small>{reserved > 0 && <em>{reserved} reservado</em>}</span>
                       </button>
                     );
                   })}
-                </div>
-
-                <aside className="messageCard">
-                  <div><p className="eyebrow">Mensaje rápido</p><h2>{currentStockProduct.name}</h2></div>
-                  <div className="inlineFields">
-                    <label>Talle<select value={messageSize} onChange={(event) => setMessageSize(event.target.value)}>{[...new Set(currentStockProduct.variants.map((variant) => variant.size))].map((size) => <option key={size}>{size}</option>)}</select></label>
+                  {!filteredProducts.length && <div className="emptyState compact"><span>⌕</span><p>No encontramos productos con esa búsqueda.</p></div>}
                   </div>
-                  <label className="checkRow"><input type="checkbox" checked={includePrice} onChange={(event) => setIncludePrice(event.target.checked)} /><span>Incluir precio</span></label>
-                  <label className="checkRow"><input type="checkbox" checked={showQuantities} onChange={(event) => setShowQuantities(event.target.checked)} /><span>Mostrar cantidades</span></label>
-                  <textarea className="messagePreview" readOnly value={stockMessage} aria-label="Vista previa del mensaje" />
-                  <button className="primaryButton" onClick={copyMessage}>Copiar mensaje</button>
                 </aside>
+
+                <div className="stockDetail">
+                  <div className="stockDetailHeading"><div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div>
+                  <div className="stockTotals"><div className="available"><span>Disponible</span><strong>{stockAvailable}</strong></div><div><span>Stock físico</span><strong>{stockOnHand}</strong></div><div className={stockReserved ? "reserved" : ""}><span>Reservado</span><strong>{stockReserved}</strong></div></div>
+
+                  <div className="stockLegend"><span><i className="legendAvailable" /> Disponible</span><span><i className="legendLow" /> Quedan 1 o 2</span><span><i className="legendOut" /> Agotado</span></div>
+                  <div className="stockMatrixWrap">
+                    <table className="stockMatrix">
+                      <thead><tr><th>Color</th>{stockSizes.map((size) => <th key={size}>Talle {size}</th>)}</tr></thead>
+                      <tbody>{stockColors.map((color) => <tr key={color}><th scope="row"><span className="colorDot" data-color={color} /><strong>{color}</strong></th>{stockSizes.map((size) => {
+                        const variant = stockLocationVariants.find((entry) => entry.color === color && entry.size === size);
+                        if (!variant) return <td key={size}><span className="stockUnavailable">—</span></td>;
+                        const available = variant.onHand - variant.reserved;
+                        const status = available <= 0 ? "out" : available <= 2 ? "low" : "ok";
+                        return <td key={size}><div className={`stockCell ${status}`}><strong>{available}</strong><span>{available === 1 ? "disponible" : "disponibles"}</span>{variant.reserved > 0 && <small>{variant.reserved} reservado{variant.reserved === 1 ? "" : "s"}</small>}</div></td>;
+                      })}</tr>)}</tbody>
+                    </table>
+                  </div>
+
+                  {showStockMessage && <div className="stockMessagePanel"><div><p className="eyebrow">Mensaje para WhatsApp</p><h3>Preparar mensaje</h3></div><div className="stockMessageOptions"><label>Talle<select value={messageSize} onChange={(event) => setMessageSize(event.target.value)}>{stockSizes.map((size) => <option key={size}>{size}</option>)}</select></label><label className="checkRow"><input type="checkbox" checked={includePrice} onChange={(event) => setIncludePrice(event.target.checked)} /><span>Incluir precio</span></label><label className="checkRow"><input type="checkbox" checked={showQuantities} onChange={(event) => setShowQuantities(event.target.checked)} /><span>Mostrar cantidades</span></label></div><textarea className="messagePreview" readOnly value={stockMessage} aria-label="Vista previa del mensaje" /><button className="primaryButton fit" onClick={copyMessage}>Copiar mensaje</button></div>}
+                </div>
               </div>
             </section>
           )}
