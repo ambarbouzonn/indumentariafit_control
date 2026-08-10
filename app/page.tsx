@@ -60,6 +60,26 @@ type Movement = {
   user: string;
 };
 
+type ProductForm = {
+  id: string | null;
+  name: string;
+  code: string;
+  category: string;
+  price: string;
+  colors: string;
+  sizes: string;
+};
+
+const emptyProductForm: ProductForm = {
+  id: null,
+  name: "",
+  code: "",
+  category: "",
+  price: "",
+  colors: "",
+  sizes: "S, M, L",
+};
+
 const locations = ["Local Centro", "Depósito", "Feria"];
 
 const initialProducts: Product[] = [
@@ -188,6 +208,8 @@ export default function Home() {
   const [showQuantities, setShowQuantities] = useState(false);
   const [intakeProductId, setIntakeProductId] = useState(initialProducts[0].id);
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
+  const [productForm, setProductForm] = useState<ProductForm | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
   const [toast, setToast] = useState("");
 
   const loadData = useCallback(async () => {
@@ -663,6 +685,56 @@ export default function Home() {
     }
   }
 
+  function openProductForm(product?: Product) {
+    if (profileRole !== "admin" && profileRole !== "manager") {
+      showToast("Solo una administradora o encargada puede modificar productos");
+      return;
+    }
+    setProductForm(product ? {
+      id: product.id,
+      name: product.name,
+      code: product.code,
+      category: product.category,
+      price: String(product.price),
+      colors: [...new Set(product.variants.map((variant) => variant.color))].join(", "),
+      sizes: [...new Set(product.variants.map((variant) => variant.size))].join(", "),
+    } : { ...emptyProductForm });
+  }
+
+  async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!productForm) return;
+    const colors = productForm.colors.split(",").map((value) => value.trim()).filter(Boolean);
+    const sizes = productForm.sizes.split(",").map((value) => value.trim()).filter(Boolean);
+    if (!colors.length || !sizes.length) {
+      showToast("Ingresá al menos un color y un talle");
+      return;
+    }
+    const combinations = colors.length * sizes.length;
+    const accepted = window.confirm(
+      `${productForm.id ? "¿Guardar los cambios?" : "¿Crear este producto?"}\nSe prepararán ${combinations} combinaciones de color y talle.`,
+    );
+    if (!accepted) return;
+    setSavingProduct(true);
+    const { error } = await supabase.rpc("save_product", {
+      p_product_id: productForm.id,
+      p_name: productForm.name.trim(),
+      p_code: productForm.code.trim().toUpperCase(),
+      p_category: productForm.category.trim(),
+      p_price: Number(productForm.price),
+      p_colors: colors,
+      p_sizes: sizes,
+    });
+    setSavingProduct(false);
+    if (error) {
+      showToast(error.message.includes("save_product") ? "Falta ejecutar la actualización SQL de Productos" : error.message);
+      return;
+    }
+    setProductForm(null);
+    await loadData();
+    showToast(productForm.id ? "Producto actualizado" : "Producto creado correctamente");
+  }
+
   function navigate(nextView: View) {
     setView(nextView);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -946,11 +1018,27 @@ export default function Home() {
 
           {view === "products" && (
             <section className="pageSection">
-              <div className="pageHeading"><div><p className="eyebrow">Catálogo</p><h1>Productos</h1><p>Productos, códigos, precios y variantes.</p></div><button className="primaryButton fit" onClick={() => showToast("El alta de productos se agregará en la próxima etapa")}>Nuevo producto</button></div>
+              <div className="pageHeading"><div><p className="eyebrow">Catálogo</p><h1>Productos</h1><p>Productos, códigos, precios y variantes.</p></div><button className="primaryButton fit" onClick={() => openProductForm()}>Nuevo producto</button></div>
+              {productForm && (
+                <div className="modalBackdrop" role="presentation">
+                  <section className="productModal" role="dialog" aria-modal="true" aria-labelledby="product-form-title">
+                    <div className="modalHeading"><div><p className="eyebrow">Catálogo</p><h2 id="product-form-title">{productForm.id ? "Editar producto" : "Nuevo producto"}</h2></div><button type="button" className="closeButton" onClick={() => setProductForm(null)} aria-label="Cerrar">×</button></div>
+                    <form onSubmit={saveProduct} className="productForm">
+                      <label>Nombre del producto<input autoFocus required value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} placeholder="Ejemplo: Palazzo de verano" /></label>
+                      <div className="formColumns"><label>Código<input required value={productForm.code} onChange={(event) => setProductForm({ ...productForm, code: event.target.value })} placeholder="PAL-001" /></label><label>Precio mayorista<input required type="number" min="0" step="1" inputMode="numeric" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} placeholder="15000" /></label></div>
+                      <label>Categoría<input required value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} placeholder="Ejemplo: Pantalones" /></label>
+                      <label>Colores <small>Separalos con comas</small><input required value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} placeholder="Negro, Crema, Bordó" /></label>
+                      <label>Talles <small>Separalos con comas</small><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} placeholder="S, M, L, XL" /></label>
+                      <div className="variantSummary"><strong>{productForm.colors.split(",").filter((value) => value.trim()).length * productForm.sizes.split(",").filter((value) => value.trim()).length || 0} variantes</strong><span>Se crea una combinación por cada color y talle. El stock comienza en cero.</span></div>
+                      <div className="modalActions"><button type="button" className="secondaryButton" onClick={() => setProductForm(null)}>Cancelar</button><button type="submit" className="primaryButton fit" disabled={savingProduct}>{savingProduct ? "Guardando…" : productForm.id ? "Guardar cambios" : "Crear producto"}</button></div>
+                    </form>
+                  </section>
+                </div>
+              )}
               <div className="catalogGrid">
                 {products.map((product) => {
                   const total = product.variants.reduce((sum, variant) => sum + variant.onHand, 0);
-                  return <article className="catalogCard" key={product.id}><div className="catalogVisual">{product.name.slice(0, 2).toUpperCase()}</div><div className="catalogBody"><span>{product.category}</span><h2>{product.name}</h2><p>{product.code} · {product.variants.length} variantes</p><div><strong>{formatMoney(product.price)}</strong><small>{total} unidades totales</small></div></div></article>;
+                  return <article className="catalogCard" key={product.id}><div className="catalogVisual">{product.name.slice(0, 2).toUpperCase()}</div><div className="catalogBody"><span>{product.category}</span><h2>{product.name}</h2><p>{product.code} · {product.variants.length} variantes</p><div><strong>{formatMoney(product.price)}</strong><small>{total} unidades totales</small></div><button className="editProductButton" onClick={() => openProductForm(product)}>Editar producto</button></div></article>;
                 })}
               </div>
             </section>

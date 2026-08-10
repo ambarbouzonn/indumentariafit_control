@@ -491,6 +491,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .catalogBody > div { display: flex; align-items: end; justify-content: space-between; gap: 10px; }
 .catalogBody > div strong { font-size: 16px; }
 .catalogBody > div small { color: var(--muted); font-size: 10px; }
+.editProductButton { width: 100%; min-height: 42px; margin-top: 16px; border: 1px solid var(--line); border-radius: 11px; background: white; color: var(--green-dark); cursor: pointer; font-weight: 700; }
+
+.modalBackdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(17, 31, 23, .58); overflow-y: auto; }
+.productModal { width: min(100%, 640px); max-height: calc(100vh - 40px); padding: 25px; border-radius: 22px; background: var(--paper); box-shadow: 0 24px 70px rgba(0,0,0,.26); overflow-y: auto; }
+.modalHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+.modalHeading h2 { margin: 3px 0 0; font-size: 25px; }
+.closeButton { width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; background: white; color: var(--ink); cursor: pointer; font-size: 25px; }
+.productForm { display: grid; gap: 15px; }
+.productForm label { display: grid; gap: 7px; color: #455149; font-size: 13px; font-weight: 700; }
+.productForm label small { color: var(--muted); font-weight: 500; }
+.productForm input { width: 100%; min-height: 51px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); font-size: 16px; }
+.formColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.variantSummary { display: grid; gap: 3px; padding: 13px 15px; border-radius: 12px; background: var(--soft); }
+.variantSummary strong { color: var(--green-dark); }
+.variantSummary span { color: var(--muted); font-size: 12px; }
+.modalActions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 5px; }
 
 .movementList { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); }
 .movementRow { display: grid; grid-template-columns: 92px minmax(0, 1fr) 50px; align-items: center; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--soft-line); }
@@ -575,6 +591,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .reservationActions { grid-column: 1; }
   .catalogGrid { grid-template-columns: 1fr; }
   .catalogVisual { height: 110px; }
+  .modalBackdrop { align-items: end; padding: 0; }
+  .productModal { max-height: 94vh; padding: 22px 18px; border-radius: 22px 22px 0 0; }
+  .formColumns { grid-template-columns: 1fr; }
+  .modalActions { flex-direction: column-reverse; }
+  .modalActions button { width: 100%; }
   .movementRow { grid-template-columns: 72px minmax(0,1fr) 38px; gap: 10px; padding: 14px 11px; }
   .movementType { padding: 5px; font-size: 9px; }
 }

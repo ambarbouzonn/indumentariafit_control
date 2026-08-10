@@ -28,6 +28,8 @@ evitar que dos vendedoras reserven o vendan las mismas unidades.
    contenido de `supabase/setup.sql`.
 3. Iniciar la aplicación y crear la primera cuenta. Esa cuenta recibe el rol de
    administradora; las siguientes se crean como vendedoras.
+4. Para habilitar el alta y la edición de productos, ejecutar también
+   `supabase/product-management.sql` desde el SQL Editor.
 
 ## Desarrollo local
 
