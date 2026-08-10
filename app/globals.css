@@ -571,6 +571,45 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .comingSoon p { max-width: 700px; margin: 0; color: var(--muted); line-height: 1.55; }
 .nextTag { padding: 8px 11px; border-radius: 999px; background: white; color: var(--green-dark); font-size: 11px; font-weight: 750; }
 
+.orderLayout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .7fr); gap: 22px; align-items: start; }
+.orderFormCard, .recentOrders { padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper); box-shadow: var(--shadow); }
+.orderSectionTitle { display: flex; align-items: center; gap: 11px; }
+.orderSectionTitle > span { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--green); color: white; font-weight: 800; }
+.orderSectionTitle h2 { margin: 0; font-size: 18px; }
+.orderSectionTitle p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.orderCustomerFields, .orderProductFields { display: grid; gap: 12px; margin-top: 16px; }
+.orderCustomerFields { grid-template-columns: 1fr 1fr; }
+.orderProductFields { grid-template-columns: 1fr 1fr 100px auto; align-items: end; }
+.orderCustomerFields label, .orderProductFields label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.orderCustomerFields input, .orderProductFields input, .orderProductFields select { width: 100%; min-height: 49px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; background: white; color: var(--ink); }
+.orderAddButton { min-height: 49px; }
+.orderDivider { margin: 22px 0; border-top: 1px solid var(--line); }
+.orderEmpty { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 18px 0; padding: 22px; border: 1px dashed #cbd4cd; border-radius: 14px; color: var(--muted); }
+.orderEmpty > span { font-size: 22px; }
+.orderEmpty p { margin: 0; font-size: 12px; }
+.orderLineList { margin: 18px 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.orderLineList article { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 13px; border-bottom: 1px solid var(--soft-line); }
+.orderLineList article:last-child { border-bottom: 0; }
+.orderLineList article > div:first-child strong, .orderLineList article > div:first-child span, .orderLineList article > div:first-child small { display: block; }
+.orderLineList article > div:first-child span, .orderLineList article > div:first-child small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.orderLineList article > div:last-child { text-align: right; }
+.orderLineList article > div:last-child strong { display: block; }
+.orderLineList article button { margin-top: 5px; padding: 3px 0; border: 0; background: transparent; color: var(--danger); cursor: pointer; font-size: 11px; }
+.orderTotal { display: flex; align-items: end; justify-content: space-between; gap: 15px; margin: 18px 0; padding: 16px; border-radius: 13px; background: var(--green-light); }
+.orderTotal span { color: var(--green-dark); font-weight: 700; }
+.orderTotal strong { color: var(--green-dark); font-size: 28px; }
+.orderStockNotice { margin: 11px 0 0; color: var(--muted); font-size: 11px; text-align: center; }
+.recentOrders { position: sticky; top: 102px; }
+.recentOrders h2 { margin: 3px 0 16px; font-size: 20px; }
+.recentOrderList { display: grid; gap: 10px; max-height: 670px; overflow-y: auto; }
+.recentOrderList article { padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #fafbf8; }
+.recentOrderHead { display: flex; justify-content: space-between; gap: 10px; color: var(--green); font-size: 11px; font-weight: 800; }
+.recentOrderHead small { color: var(--muted); font-weight: 500; }
+.recentOrderList h3 { margin: 8px 0 3px; font-size: 15px; }
+.recentOrderList p { margin: 0 0 10px; color: var(--muted); font-size: 11px; }
+.recentOrderList article > strong { display: block; margin-bottom: 10px; font-size: 20px; }
+.recentOrderList .secondaryButton { width: 100%; }
+
 .catalogGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
 .catalogCard { overflow: hidden; border: 1px solid var(--line); border-radius: 19px; background: var(--paper); }
 .catalogVisual { height: 138px; display: grid; place-items: center; background: linear-gradient(145deg, #dce9e1, #eff3ec); color: rgba(23,107,73,.5); font-size: 34px; font-weight: 750; letter-spacing: -0.06em; }
@@ -624,6 +663,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .checkoutCard, .messageCard { position: static; }
   .stockExplorer { grid-template-columns: 1fr; }
   .stockProductPicker .productResults { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .orderLayout { grid-template-columns: 1fr; }
+  .recentOrders { position: static; }
 }
 
 @media (max-width: 780px) {
@@ -660,6 +701,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .reservationActions { grid-column: 1 / -1; }
   .reservationActions button { flex: 1; }
   .comingSoon { grid-template-columns: auto 1fr; padding: 20px; }
+  .orderProductFields { grid-template-columns: 1fr 1fr; }
+  .orderProductFields .orderAddButton { width: 100%; }
   .nextTag { grid-column: 1 / -1; justify-self: start; }
 }
 
@@ -715,6 +758,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .reservationMeta span, .reservationMeta strong { display: inline; margin-right: 6px; }
   .reservationActions { grid-column: 1; }
   .catalogGrid { grid-template-columns: 1fr; }
+  .orderFormCard, .recentOrders { padding: 17px; }
+  .orderCustomerFields, .orderProductFields { grid-template-columns: 1fr; }
+  .orderLineList article { align-items: flex-start; }
+  .orderTotal strong { font-size: 23px; }
   .catalogVisual { height: 110px; }
   .modalBackdrop { align-items: end; padding: 0; }
   .productModal { max-height: 94vh; padding: 22px 18px; border-radius: 22px 22px 0 0; }

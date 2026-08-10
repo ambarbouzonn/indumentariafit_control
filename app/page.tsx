@@ -61,6 +61,26 @@ type Movement = {
   user: string;
 };
 
+type OrderLine = {
+  productId: string;
+  variantId: string | null;
+  productName: string;
+  variantLabel: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+type CustomerOrder = {
+  id: string;
+  orderNumber: number;
+  customerName: string;
+  customerPhone: string;
+  total: number;
+  status: string;
+  createdAt: string;
+  lines: OrderLine[];
+};
+
 type ProductForm = {
   id: string | null;
   name: string;
@@ -236,13 +256,21 @@ export default function Home() {
   const [transferQuantity, setTransferQuantity] = useState(1);
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [orderCustomerName, setOrderCustomerName] = useState("");
+  const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
+  const [orderProductId, setOrderProductId] = useState(initialProducts[0].id);
+  const [orderVariantId, setOrderVariantId] = useState("");
+  const [orderQuantity, setOrderQuantity] = useState(1);
+  const [orderLines, setOrderLines] = useState<OrderLine[]>([]);
+  const [savingOrder, setSavingOrder] = useState(false);
   const [toast, setToast] = useState("");
 
   const loadData = useCallback(async () => {
     setDataLoading(true);
     setDatabaseError("");
 
-    const [stockResult, reservationResult, movementResult, profileResult] = await Promise.all([
+    const [stockResult, reservationResult, movementResult, orderResult, profileResult] = await Promise.all([
       supabase
         .from("stock_by_location")
         .select("id, on_hand, reserved, variant_id, location_id, locations(name, active), variants(id, products(id, name, code, price, active, categories(name)), colors(name), sizes(name))")
@@ -257,10 +285,15 @@ export default function Home() {
         .select("id, movement_type, quantity, reason, created_at, profiles(full_name), variants(products(name), colors(name), sizes(name)), locations(name)")
         .order("created_at", { ascending: false })
         .limit(40),
+      supabase
+        .from("customer_orders")
+        .select("id, order_number, customer_name, customer_phone, total, status, created_at, customer_order_items(product_id, variant_id, product_name, variant_label, quantity, unit_price)")
+        .order("created_at", { ascending: false })
+        .limit(30),
       supabase.from("profiles").select("full_name, role").single(),
     ]);
 
-    const firstError = stockResult.error ?? reservationResult.error ?? movementResult.error ?? profileResult.error;
+    const firstError = stockResult.error ?? reservationResult.error ?? movementResult.error ?? orderResult.error ?? profileResult.error;
     if (firstError) {
       setDatabaseError(
         firstError.message.includes("does not exist") || firstError.code === "PGRST205"
@@ -308,6 +341,7 @@ export default function Home() {
       setSaleProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
       setStockProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
       setIntakeProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
+      setOrderProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
     }
 
     const loadedReservations: Reservation[] = [];
@@ -348,6 +382,23 @@ export default function Home() {
       };
     });
     setMovements(loadedMovements);
+    setOrders(((orderResult.data ?? []) as unknown as Array<Record<string, any>>).map((rawOrder) => ({
+      id: rawOrder.id,
+      orderNumber: Number(rawOrder.order_number),
+      customerName: rawOrder.customer_name,
+      customerPhone: rawOrder.customer_phone,
+      total: Number(rawOrder.total),
+      status: rawOrder.status,
+      createdAt: rawOrder.created_at,
+      lines: (rawOrder.customer_order_items ?? []).map((line: Record<string, any>) => ({
+        productId: line.product_id,
+        variantId: line.variant_id,
+        productName: line.product_name,
+        variantLabel: line.variant_label ?? "",
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unit_price),
+      })),
+    })));
     setProfileName(profileResult.data?.full_name || session?.user.email?.split("@")[0] || "Usuario");
     setProfileRole(profileResult.data?.role || "seller");
     setDataLoading(false);
@@ -373,6 +424,8 @@ export default function Home() {
       .on("postgres_changes", { event: "*", schema: "public", table: "stock_by_location" }, () => void loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => void loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => void loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_orders" }, () => void loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_order_items" }, () => void loadData())
       .subscribe((status) => setRealtimeConnected(status === "SUBSCRIBED"));
     return () => { void supabase.removeChannel(channel); };
   }, [loadData, session, supabase]);
@@ -438,6 +491,9 @@ export default function Home() {
   const currentTransferProduct = products.find((product) => product.id === transferProductId) ?? products[0];
   const transferOriginVariants = currentTransferProduct.variants.filter((variant) => variant.location === transferOrigin);
   const selectedTransferVariant = transferOriginVariants.find((variant) => variant.stockId === transferStockId);
+  const currentOrderProduct = products.find((product) => product.id === orderProductId) ?? products[0];
+  const orderVariants = [...new Map(currentOrderProduct.variants.filter((variant) => variant.variantId).map((variant) => [variant.variantId, variant])).values()];
+  const orderTotal = orderLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const stockLocationVariants = variantsAt(currentStockProduct, location);
   const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
   const stockSizes = [...new Set(stockLocationVariants.map((variant) => variant.size))];
@@ -759,6 +815,127 @@ export default function Home() {
     setTransferQuantity(1);
     await loadData();
     showToast("Transferencia registrada correctamente");
+  }
+
+  function addOrderLine() {
+    const variant = orderVariants.find((entry) => entry.variantId === orderVariantId);
+    if (!variant) {
+      showToast("Elegí un color y talle");
+      return;
+    }
+    const nextLine: OrderLine = {
+      productId: currentOrderProduct.id,
+      variantId: variant.variantId ?? null,
+      productName: currentOrderProduct.name,
+      variantLabel: `${variant.color} · Talle ${variant.size}`,
+      quantity: Math.max(1, orderQuantity),
+      unitPrice: currentOrderProduct.price,
+    };
+    setOrderLines((current) => {
+      const existing = current.find((line) => line.productId === nextLine.productId && line.variantId === nextLine.variantId);
+      return existing
+        ? current.map((line) => line === existing ? { ...line, quantity: line.quantity + nextLine.quantity } : line)
+        : [...current, nextLine];
+    });
+    setOrderQuantity(1);
+    showToast("Producto agregado al pedido");
+  }
+
+  async function createOrder() {
+    if (!orderCustomerName.trim() || !orderCustomerPhone.trim()) {
+      showToast("Completá el nombre y el teléfono del cliente");
+      return;
+    }
+    if (!orderLines.length) {
+      showToast("Agregá al menos un producto");
+      return;
+    }
+    if (!window.confirm(`¿Crear el pedido para ${orderCustomerName.trim()} por ${formatMoney(orderTotal)}?\n\nEste pedido no descontará stock.`)) return;
+    setSavingOrder(true);
+    const { data, error } = await supabase.rpc("create_customer_order", {
+      p_customer_name: orderCustomerName.trim(),
+      p_customer_phone: orderCustomerPhone.trim(),
+      p_lines: orderLines.map((line) => ({ product_id: line.productId, variant_id: line.variantId, quantity: line.quantity })),
+    });
+    setSavingOrder(false);
+    if (error) {
+      showToast(error.message.includes("create_customer_order") ? "Falta ejecutar la actualización SQL de Pedidos" : error.message);
+      return;
+    }
+    const result = data as { id: string; order_number: number };
+    const createdOrder: CustomerOrder = {
+      id: result.id,
+      orderNumber: Number(result.order_number),
+      customerName: orderCustomerName.trim(),
+      customerPhone: orderCustomerPhone.trim(),
+      total: orderTotal,
+      status: "ordered",
+      createdAt: new Date().toISOString(),
+      lines: orderLines,
+    };
+    setOrders((current) => [createdOrder, ...current]);
+    setOrderCustomerName("");
+    setOrderCustomerPhone("");
+    setOrderLines([]);
+    await loadData();
+    showToast(`Pedido #${result.order_number} creado correctamente`);
+  }
+
+  function downloadOrderReceipt(order: CustomerOrder) {
+    const width = 1080;
+    const height = 470 + order.lines.length * 112;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.fillStyle = "#fffefa";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#176b49";
+    context.fillRect(0, 0, width, 150);
+    context.fillStyle = "#ffffff";
+    context.font = "700 48px Arial";
+    context.fillText("INDUMENTARIA FIT", 64, 72);
+    context.font = "26px Arial";
+    context.fillText(`Pedido #${order.orderNumber}`, 64, 116);
+    context.textAlign = "right";
+    context.fillText(new Date(order.createdAt).toLocaleDateString("es-AR"), width - 64, 105);
+    context.textAlign = "left";
+    context.fillStyle = "#17231d";
+    context.font = "700 30px Arial";
+    context.fillText(order.customerName, 64, 210);
+    context.fillStyle = "#647068";
+    context.font = "24px Arial";
+    context.fillText(`Teléfono: ${order.customerPhone}`, 64, 248);
+    let y = 310;
+    context.strokeStyle = "#dfe5e0";
+    for (const line of order.lines) {
+      context.beginPath(); context.moveTo(64, y - 26); context.lineTo(width - 64, y - 26); context.stroke();
+      context.fillStyle = "#17231d"; context.font = "700 27px Arial"; context.fillText(line.productName, 64, y);
+      context.fillStyle = "#647068"; context.font = "21px Arial"; context.fillText(line.variantLabel, 64, y + 31);
+      context.textAlign = "right";
+      context.fillStyle = "#17231d"; context.font = "23px Arial"; context.fillText(`${line.quantity} × ${formatMoney(line.unitPrice)}`, width - 64, y);
+      context.font = "700 25px Arial"; context.fillText(formatMoney(line.quantity * line.unitPrice), width - 64, y + 35);
+      context.textAlign = "left";
+      y += 112;
+    }
+    context.fillStyle = "#e1f0e7";
+    context.fillRect(64, height - 125, width - 128, 76);
+    context.fillStyle = "#0f5036";
+    context.font = "700 28px Arial";
+    context.fillText("TOTAL", 92, height - 77);
+    context.textAlign = "right";
+    context.font = "700 36px Arial";
+    context.fillText(formatMoney(order.total), width - 92, height - 75);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `pedido-${order.orderNumber}-${order.customerName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
   }
 
   async function copyMessage() {
@@ -1143,11 +1320,23 @@ export default function Home() {
 
           {view === "orders" && (
             <section className="pageSection">
-              <div className="pageHeading"><div><p className="eyebrow">Por encargo</p><h1>Pedidos</h1><p>Esta será la próxima parte que vamos a definir juntos.</p></div></div>
-              <div className="comingSoon">
-                <span className="comingIcon">□</span>
-                <div><h2>Base preparada para pedidos</h2><p>Acá vamos a registrar productos encargados, precios congelados, señas y el estado de entrega sin tocar el stock hasta que la mercadería ingrese.</p></div>
-                <span className="nextTag">Siguiente etapa</span>
+              <div className="pageHeading"><div><p className="eyebrow">Por encargo</p><h1>Pedidos</h1><p>Creá pedidos sin descontar unidades del stock.</p></div></div>
+              <div className="orderLayout">
+                <div className="orderFormCard">
+                  <div className="orderSectionTitle"><span>1</span><div><h2>Datos del cliente</h2><p>Estos datos aparecerán en el comprobante.</p></div></div>
+                  <div className="orderCustomerFields"><label>Nombre y apellido<input value={orderCustomerName} onChange={(event) => setOrderCustomerName(event.target.value)} placeholder="Ejemplo: Carla Gómez" /></label><label>Teléfono<input type="tel" inputMode="tel" value={orderCustomerPhone} onChange={(event) => setOrderCustomerPhone(event.target.value)} placeholder="Ejemplo: 11 2345-6789" /></label></div>
+                  <div className="orderDivider" />
+                  <div className="orderSectionTitle"><span>2</span><div><h2>Agregar productos</h2><p>El precio queda congelado al confirmar el pedido.</p></div></div>
+                  <div className="orderProductFields"><label>Producto<select value={orderProductId} onChange={(event) => { setOrderProductId(event.target.value); setOrderVariantId(""); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {formatMoney(product.price)}</option>)}</select></label><label>Color y talle<select value={orderVariantId} onChange={(event) => setOrderVariantId(event.target.value)}><option value="">Elegir variante</option>{orderVariants.map((variant) => <option key={variant.variantId} value={variant.variantId}>{variant.color} · Talle {variant.size}</option>)}</select></label><label>Cantidad<input type="number" min="1" inputMode="numeric" value={orderQuantity} onChange={(event) => setOrderQuantity(Math.max(1, Math.floor(Number(event.target.value))))} /></label><button className="secondaryButton orderAddButton" onClick={addOrderLine}>Agregar</button></div>
+                  {orderLines.length === 0 ? <div className="orderEmpty"><span>＋</span><p>Agregá los productos que encargó el cliente.</p></div> : <div className="orderLineList">{orderLines.map((line) => <article key={`${line.productId}-${line.variantId}`}><div><strong>{line.productName}</strong><span>{line.variantLabel}</span><small>{line.quantity} × {formatMoney(line.unitPrice)}</small></div><div><strong>{formatMoney(line.quantity * line.unitPrice)}</strong><button onClick={() => setOrderLines((current) => current.filter((entry) => entry !== line))}>Quitar</button></div></article>)}</div>}
+                  <div className="orderTotal"><span>Total del pedido</span><strong>{formatMoney(orderTotal)}</strong></div>
+                  <button className="primaryButton" disabled={savingOrder || !orderLines.length || !orderCustomerName.trim() || !orderCustomerPhone.trim()} onClick={createOrder}>{savingOrder ? "Guardando…" : "Revisar y crear pedido"}</button>
+                  <p className="orderStockNotice">Este pedido es por encargo y no modifica el stock disponible.</p>
+                </div>
+                <aside className="recentOrders">
+                  <div><p className="eyebrow">Últimos pedidos</p><h2>Comprobantes</h2></div>
+                  {orders.length === 0 ? <div className="emptyState compact"><span>□</span><p>Todavía no hay pedidos registrados.</p></div> : <div className="recentOrderList">{orders.map((order) => <article key={order.id}><div className="recentOrderHead"><span>Pedido #{order.orderNumber}</span><small>{new Date(order.createdAt).toLocaleDateString("es-AR")}</small></div><h3>{order.customerName}</h3><p>{order.customerPhone} · {order.lines.reduce((sum, line) => sum + line.quantity, 0)} unidades</p><strong>{formatMoney(order.total)}</strong><button className="secondaryButton" onClick={() => downloadOrderReceipt(order)}>Descargar imagen</button></article>)}</div>}
+                </aside>
               </div>
             </section>
           )}
