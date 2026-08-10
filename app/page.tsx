@@ -103,10 +103,30 @@ const emptyProductForm: ProductForm = {
 
 const physicalLocations = ["Depósito", "Feria"];
 const locations = ["Todo el stock", ...physicalLocations];
+const preferredSizeOrder = ["S", "M", "L", "XL", "XXL"];
+
+function compareSizes(first: string, second: string) {
+  const normalizedFirst = first.trim().toLocaleUpperCase("es");
+  const normalizedSecond = second.trim().toLocaleUpperCase("es");
+  const firstIndex = preferredSizeOrder.indexOf(normalizedFirst);
+  const secondIndex = preferredSizeOrder.indexOf(normalizedSecond);
+  const firstRank = firstIndex === -1 ? preferredSizeOrder.length : firstIndex;
+  const secondRank = secondIndex === -1 ? preferredSizeOrder.length : secondIndex;
+
+  return firstRank - secondRank || normalizedFirst.localeCompare(normalizedSecond, "es", { numeric: true });
+}
+
+function compareVariantsBySize(first: Variant, second: Variant) {
+  return compareSizes(first.size, second.size) || first.color.localeCompare(second.color, "es", { sensitivity: "base" });
+}
+
+function orderedSizes(sizes: string[]) {
+  return [...new Set(sizes)].sort(compareSizes);
+}
 
 function variantsAt(product: Product, selectedLocation: string) {
   const visible = product.variants.filter((variant) => physicalLocations.includes(variant.location));
-  if (selectedLocation !== "Todo el stock") return visible.filter((variant) => variant.location === selectedLocation);
+  if (selectedLocation !== "Todo el stock") return visible.filter((variant) => variant.location === selectedLocation).sort(compareVariantsBySize);
   const grouped = new Map<string, Variant>();
   for (const variant of visible) {
     const key = `${variant.color}::${variant.size}`;
@@ -118,7 +138,7 @@ function variantsAt(product: Product, selectedLocation: string) {
       grouped.set(key, { ...variant, id: `all-${key}`, stockId: undefined, locationId: undefined, location: "Todo el stock" });
     }
   }
-  return [...grouped.values()];
+  return [...grouped.values()].sort(compareVariantsBySize);
 }
 
 const initialProducts: Product[] = [
@@ -493,20 +513,20 @@ export default function Home() {
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
   const currentTransferProduct = products.find((product) => product.id === transferProductId) ?? products[0];
-  const transferOriginVariants = currentTransferProduct.variants.filter((variant) => variant.location === transferOrigin);
+  const transferOriginVariants = currentTransferProduct.variants.filter((variant) => variant.location === transferOrigin).sort(compareVariantsBySize);
   const selectedTransferVariant = transferOriginVariants.find((variant) => variant.stockId === transferStockId);
   const currentOrderProduct = products.find((product) => product.id === orderProductId) ?? products[0];
-  const orderVariants = [...new Map(currentOrderProduct.variants.filter((variant) => variant.variantId).map((variant) => [variant.variantId, variant])).values()];
+  const orderVariants = [...new Map(currentOrderProduct.variants.filter((variant) => variant.variantId).map((variant) => [variant.variantId, variant])).values()].sort(compareVariantsBySize);
   const orderTotal = orderLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const stockLocationVariants = variantsAt(currentStockProduct, location);
   const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
-  const stockSizes = [...new Set(stockLocationVariants.map((variant) => variant.size))];
+  const stockSizes = orderedSizes(stockLocationVariants.map((variant) => variant.size));
   const stockOnHand = stockLocationVariants.reduce((sum, variant) => sum + variant.onHand, 0);
   const stockReserved = stockLocationVariants.reduce((sum, variant) => sum + variant.reserved, 0);
   const stockAvailable = stockOnHand - stockReserved;
   const intakeLocationVariants = currentIntakeProduct.variants.filter((variant) => variant.location === location);
   const intakeColors = [...new Set(intakeLocationVariants.map((variant) => variant.color))];
-  const intakeSizes = [...new Set(intakeLocationVariants.map((variant) => variant.size))];
+  const intakeSizes = orderedSizes(intakeLocationVariants.map((variant) => variant.size));
 
   const cartDetails = cart.flatMap((item) => {
     const product = products.find((entry) => entry.id === item.productId);
@@ -962,7 +982,7 @@ export default function Home() {
       category: product.category,
       price: String(product.price),
       colors: [...new Set(product.variants.map((variant) => variant.color))].join(", "),
-      sizes: [...new Set(product.variants.map((variant) => variant.size))].join(", "),
+      sizes: orderedSizes(product.variants.map((variant) => variant.size)).join(", "),
     } : { ...emptyProductForm });
   }
 
@@ -1174,7 +1194,7 @@ export default function Home() {
                   </select>
 
                   <div className="variantList">
-                    {currentSaleProduct.variants.filter((variant) => variant.location === location).map((variant) => {
+                    {currentSaleProduct.variants.filter((variant) => variant.location === location).sort(compareVariantsBySize).map((variant) => {
                       const available = variant.onHand - variant.reserved;
                       return (
                         <article className="variantRow" key={variant.id}>
