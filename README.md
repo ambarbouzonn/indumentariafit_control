@@ -5,8 +5,8 @@ mercadería, productos y movimientos de Indumentaria Fit.
 
 ## Estado actual
 
-La primera versión funciona con datos de demostración guardados en memoria.
-Permite probar los recorridos principales antes de conectar la base de datos:
+La aplicación usa Supabase para guardar la información, autenticar usuarios y
+sincronizar el stock en tiempo real. Permite:
 
 - registrar una venta y reservar temporalmente sus unidades;
 - descontar stock al confirmar la venta;
@@ -17,21 +17,30 @@ Permite probar los recorridos principales antes de conectar la base de datos:
 - revisar productos y movimientos;
 - ver el espacio reservado para pedidos por encargo.
 
-Los cambios se reinician al recargar la página. La persistencia, los usuarios y
-la sincronización en tiempo real se incorporarán en la siguiente etapa.
+Las operaciones sensibles se ejecutan dentro de funciones de base de datos para
+evitar que dos vendedoras reserven o vendan las mismas unidades.
+
+## Configuración de Supabase
+
+1. Copiar `.env.example` como `.env.local` y completar la URL y la clave
+   publicable del proyecto.
+2. En Supabase, abrir **SQL Editor**, crear una consulta nueva y ejecutar todo el
+   contenido de `supabase/setup.sql`.
+3. Iniciar la aplicación y crear la primera cuenta. Esa cuenta recibe el rol de
+   administradora; las siguientes se crean como vendedoras.
 
 ## Desarrollo local
 
-Requiere Node.js 22.13 o superior y pnpm.
+Requiere Node.js 22.13 o superior.
 
 ```bash
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 Verificación:
 
 ```bash
-pnpm build
-pnpm test
+npm run build
+npm test
 ```

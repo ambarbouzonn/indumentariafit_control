@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { createClient } from "../lib/supabase/client";
 
 type View =
   | "home"
@@ -14,6 +16,9 @@ type View =
 
 type Variant = {
   id: string;
+  stockId?: string;
+  variantId?: string;
+  locationId?: string;
   color: string;
   size: string;
   location: string;
@@ -153,6 +158,19 @@ const formatMoney = (value: number) =>
   }).format(value);
 
 export default function Home() {
+  const supabase = useMemo(() => createClient(), []);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [profileName, setProfileName] = useState("Usuario");
+  const [profileRole, setProfileRole] = useState("seller");
+  const [dataLoading, setDataLoading] = useState(true);
+  const [databaseError, setDatabaseError] = useState("");
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [view, setView] = useState<View>("home");
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
@@ -161,6 +179,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [saleProductId, setSaleProductId] = useState(initialProducts[0].id);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [reservationId, setReservationId] = useState<string | null>(null);
   const [customer, setCustomer] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Transferencia");
   const [stockProductId, setStockProductId] = useState(initialProducts[0].id);
@@ -170,6 +189,181 @@ export default function Home() {
   const [intakeProductId, setIntakeProductId] = useState(initialProducts[0].id);
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
   const [toast, setToast] = useState("");
+
+  const loadData = useCallback(async () => {
+    setDataLoading(true);
+    setDatabaseError("");
+
+    const [stockResult, reservationResult, movementResult, profileResult] = await Promise.all([
+      supabase
+        .from("stock_by_location")
+        .select("id, on_hand, reserved, variant_id, location_id, locations(name), variants(id, products(id, name, code, price, categories(name)), colors(name), sizes(name))")
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("reservations")
+        .select("id, customer_name, expires_at, status, reservation_items(quantity, stock_by_location(id, variants(products(id, name), colors(name), sizes(name)), locations(name)))")
+        .eq("status", "active")
+        .order("expires_at", { ascending: true }),
+      supabase
+        .from("inventory_movements")
+        .select("id, movement_type, quantity, reason, created_at, profiles(full_name), variants(products(name), colors(name), sizes(name)), locations(name)")
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase.from("profiles").select("full_name, role").single(),
+    ]);
+
+    const firstError = stockResult.error ?? reservationResult.error ?? movementResult.error ?? profileResult.error;
+    if (firstError) {
+      setDatabaseError(
+        firstError.message.includes("does not exist") || firstError.code === "PGRST205"
+          ? "La conexión funciona, pero todavía falta ejecutar el archivo de preparación de la base."
+          : firstError.message,
+      );
+      setDataLoading(false);
+      return;
+    }
+
+    const groupedProducts = new Map<string, Product>();
+    for (const rawRow of (stockResult.data ?? []) as unknown as Array<Record<string, any>>) {
+      const variantRelation = Array.isArray(rawRow.variants) ? rawRow.variants[0] : rawRow.variants;
+      const productRelation = Array.isArray(variantRelation?.products) ? variantRelation.products[0] : variantRelation?.products;
+      const colorRelation = Array.isArray(variantRelation?.colors) ? variantRelation.colors[0] : variantRelation?.colors;
+      const sizeRelation = Array.isArray(variantRelation?.sizes) ? variantRelation.sizes[0] : variantRelation?.sizes;
+      const locationRelation = Array.isArray(rawRow.locations) ? rawRow.locations[0] : rawRow.locations;
+      const categoryRelation = Array.isArray(productRelation?.categories) ? productRelation.categories[0] : productRelation?.categories;
+      if (!productRelation || !variantRelation || !locationRelation) continue;
+      if (!groupedProducts.has(productRelation.id)) {
+        groupedProducts.set(productRelation.id, {
+          id: productRelation.id,
+          name: productRelation.name,
+          code: productRelation.code,
+          category: categoryRelation?.name ?? "Sin categoría",
+          price: Number(productRelation.price),
+          variants: [],
+        });
+      }
+      groupedProducts.get(productRelation.id)?.variants.push({
+        id: rawRow.id,
+        stockId: rawRow.id,
+        variantId: variantRelation.id,
+        locationId: rawRow.location_id,
+        color: colorRelation?.name ?? "Sin color",
+        size: sizeRelation?.name ?? "Único",
+        location: locationRelation.name,
+        onHand: Number(rawRow.on_hand),
+        reserved: Number(rawRow.reserved),
+      });
+    }
+    const loadedProducts = Array.from(groupedProducts.values());
+    if (loadedProducts.length) {
+      setProducts(loadedProducts);
+      setSaleProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
+      setStockProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
+      setIntakeProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
+    }
+
+    const loadedReservations: Reservation[] = [];
+    for (const rawReservation of (reservationResult.data ?? []) as unknown as Array<Record<string, any>>) {
+      for (const rawItem of rawReservation.reservation_items ?? []) {
+        const stockRelation = Array.isArray(rawItem.stock_by_location) ? rawItem.stock_by_location[0] : rawItem.stock_by_location;
+        const variantRelation = Array.isArray(stockRelation?.variants) ? stockRelation.variants[0] : stockRelation?.variants;
+        const productRelation = Array.isArray(variantRelation?.products) ? variantRelation.products[0] : variantRelation?.products;
+        const locationRelation = Array.isArray(stockRelation?.locations) ? stockRelation.locations[0] : stockRelation?.locations;
+        loadedReservations.push({
+          id: rawReservation.id,
+          customer: rawReservation.customer_name || "Sin cliente",
+          productId: productRelation?.id ?? "",
+          variantId: stockRelation?.id ?? "",
+          quantity: Number(rawItem.quantity),
+          expiresAt: new Date(rawReservation.expires_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }),
+          status: "Activa",
+        });
+        if (!locationRelation) continue;
+      }
+    }
+    setReservations(loadedReservations);
+
+    const loadedMovements: Movement[] = ((movementResult.data ?? []) as unknown as Array<Record<string, any>>).map((rawMovement) => {
+      const variantRelation = Array.isArray(rawMovement.variants) ? rawMovement.variants[0] : rawMovement.variants;
+      const productRelation = Array.isArray(variantRelation?.products) ? variantRelation.products[0] : variantRelation?.products;
+      const colorRelation = Array.isArray(variantRelation?.colors) ? variantRelation.colors[0] : variantRelation?.colors;
+      const sizeRelation = Array.isArray(variantRelation?.sizes) ? variantRelation.sizes[0] : variantRelation?.sizes;
+      const locationRelation = Array.isArray(rawMovement.locations) ? rawMovement.locations[0] : rawMovement.locations;
+      const profileRelation = Array.isArray(rawMovement.profiles) ? rawMovement.profiles[0] : rawMovement.profiles;
+      return {
+        id: rawMovement.id,
+        type: rawMovement.movement_type === "sale" ? "Venta" : rawMovement.movement_type === "intake" ? "Ingreso" : rawMovement.movement_type,
+        detail: `${productRelation?.name ?? "Producto"} · ${colorRelation?.name ?? ""} · ${sizeRelation?.name ?? ""} · ${locationRelation?.name ?? ""}`,
+        quantity: Number(rawMovement.quantity),
+        date: new Date(rawMovement.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+        user: profileRelation?.full_name ?? "Usuario",
+      };
+    });
+    setMovements(loadedMovements);
+    setProfileName(profileResult.data?.full_name || session?.user.email?.split("@")[0] || "Usuario");
+    setProfileRole(profileResult.data?.role || "seller");
+    setDataLoading(false);
+  }, [session?.user.email, supabase]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!session) return;
+    void supabase.rpc("release_expired_reservations").then(() => loadData());
+    const channel = supabase
+      .channel("inventory-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "stock_by_location" }, () => void loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => void loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => void loadData())
+      .subscribe((status) => setRealtimeConnected(status === "SUBSCRIBED"));
+    return () => { void supabase.removeChannel(channel); };
+  }, [loadData, session, supabase]);
+
+  async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    if (authMode === "signup") {
+      const { data, error } = await supabase.auth.signUp({
+        email: authEmail.trim(),
+        password: authPassword,
+        options: { data: { full_name: authName.trim() } },
+      });
+      setAuthLoading(false);
+      if (error) {
+        setAuthError(error.message);
+        return;
+      }
+      if (!data.session) {
+        setAuthError("Cuenta creada. Revisá tu correo para confirmar y después iniciá sesión.");
+        setAuthMode("signin");
+      }
+      return;
+    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authEmail.trim(),
+      password: authPassword,
+    });
+    setAuthLoading(false);
+    if (error) setAuthError("No pudimos ingresar. Revisá el correo y la contraseña.");
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    setCart([]);
+    setReservationId(null);
+    setRealtimeConnected(false);
+  }
 
   const activeReservations = reservations.filter((item) => item.status === "Activa");
   const totalAvailable = products.reduce(
@@ -252,13 +446,28 @@ export default function Home() {
     );
   }
 
-  function addToCart(variantId: string) {
+  async function addToCart(variantId: string) {
     const variant = currentSaleProduct.variants.find((entry) => entry.id === variantId);
     if (!variant || variant.onHand - variant.reserved <= 0) {
       showToast("Esa variante ya no tiene stock disponible");
       return;
     }
-    updateVariant(currentSaleProduct.id, variant.id, { reserved: variant.reserved + 1 });
+    if (variant.stockId) {
+      const { data, error } = await supabase.rpc("reserve_stock", {
+        p_reservation_id: reservationId,
+        p_stock_id: variant.stockId,
+        p_quantity: 1,
+        p_customer_name: customer || null,
+      });
+      if (error) {
+        showToast(error.message.includes("Stock insuficiente") ? "Esa variante ya no tiene stock disponible" : error.message);
+        await loadData();
+        return;
+      }
+      setReservationId(data as string);
+    } else {
+      updateVariant(currentSaleProduct.id, variant.id, { reserved: variant.reserved + 1 });
+    }
     setCart((current) => {
       const existing = current.find(
         (item) => item.productId === currentSaleProduct.id && item.variantId === variant.id,
@@ -269,13 +478,24 @@ export default function Home() {
           )
         : [...current, { productId: currentSaleProduct.id, variantId: variant.id, quantity: 1 }];
     });
+    if (variant.stockId) await loadData();
     showToast("Unidad reservada por 15 minutos");
   }
 
-  function removeFromCart(item: CartItem) {
+  async function removeFromCart(item: CartItem) {
     const product = products.find((entry) => entry.id === item.productId);
     const variant = product?.variants.find((entry) => entry.id === item.variantId);
-    if (variant) {
+    if (variant?.stockId && reservationId) {
+      const { error } = await supabase.rpc("release_reserved_stock", {
+        p_reservation_id: reservationId,
+        p_stock_id: variant.stockId,
+        p_quantity: 1,
+      });
+      if (error) {
+        showToast(error.message);
+        return;
+      }
+    } else if (variant) {
       updateVariant(item.productId, item.variantId, {
         reserved: Math.max(0, variant.reserved - 1),
       });
@@ -286,14 +506,35 @@ export default function Home() {
         return entry.quantity > 1 ? [{ ...entry, quantity: entry.quantity - 1 }] : [];
       }),
     );
+    if (variant?.stockId) await loadData();
   }
 
-  function confirmSale() {
+  async function confirmSale() {
     if (!cartDetails.length) return;
     const accepted = window.confirm(
       `¿Confirmar la venta por ${formatMoney(cartTotal)}? El stock se descontará ahora.`,
     );
     if (!accepted) return;
+
+    if (reservationId) {
+      const { error } = await supabase.rpc("confirm_reserved_sale", {
+        p_reservation_id: reservationId,
+        p_customer_name: customer || null,
+        p_payment_method: paymentMethod,
+      });
+      if (error) {
+        showToast(error.message);
+        await loadData();
+        return;
+      }
+      setCart([]);
+      setReservationId(null);
+      setCustomer("");
+      await loadData();
+      setView("home");
+      showToast("Venta registrada correctamente");
+      return;
+    }
 
     const now = new Date();
     const newMovements: Movement[] = cartDetails.map((item, index) => ({
@@ -329,8 +570,18 @@ export default function Home() {
     showToast("Venta registrada correctamente");
   }
 
-  function cancelReservation(reservation: Reservation) {
+  async function cancelReservation(reservation: Reservation) {
     if (!window.confirm(`¿Cancelar la reserva ${reservation.id}? La unidad volverá a estar disponible.`)) return;
+    if (reservation.id.length > 20) {
+      const { error } = await supabase.rpc("cancel_reservation", { p_reservation_id: reservation.id });
+      if (error) {
+        showToast(error.message);
+        return;
+      }
+      await loadData();
+      showToast("Reserva cancelada");
+      return;
+    }
     const product = products.find((entry) => entry.id === reservation.productId);
     const variant = product?.variants.find((entry) => entry.id === reservation.variantId);
     if (variant) {
@@ -346,7 +597,7 @@ export default function Home() {
     showToast("Reserva cancelada");
   }
 
-  function confirmIntake() {
+  async function confirmIntake() {
     const entries = Object.entries(intakeValues).filter(([, value]) => Number(value) > 0);
     if (!entries.length) {
       showToast("Ingresá al menos una cantidad");
@@ -354,6 +605,25 @@ export default function Home() {
     }
     const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
     if (!window.confirm(`¿Confirmar el ingreso de ${total} unidades en ${location}?`)) return;
+
+    const databaseLines = entries.flatMap(([variantId, quantity]) => {
+      const variant = currentIntakeProduct.variants.find((entry) => entry.id === variantId);
+      return variant?.stockId ? [{ stock_id: variant.stockId, quantity: Number(quantity) }] : [];
+    });
+    if (databaseLines.length) {
+      const { error } = await supabase.rpc("record_inventory_intake", {
+        p_lines: databaseLines,
+        p_reason: "Ingreso de mercadería",
+      });
+      if (error) {
+        showToast(error.message);
+        return;
+      }
+      setIntakeValues({});
+      await loadData();
+      showToast("Mercadería ingresada correctamente");
+      return;
+    }
 
     const now = new Date();
     const newMovements: Movement[] = [];
@@ -398,6 +668,49 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  if (authLoading && !session) {
+    return <div className="authShell"><div className="authCard"><span className="authLogo">IF</span><h1>Indumentaria Fit</h1><p>Conectando con la base de datos…</p></div></div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="authShell">
+        <div className="authCard">
+          <span className="authLogo">IF</span>
+          <p className="eyebrow">Control interno</p>
+          <h1>{authMode === "signin" ? "Ingresar" : "Crear primera cuenta"}</h1>
+          <p className="authIntro">Usá tu correo y una contraseña para acceder al stock de Indumentaria Fit.</p>
+          <form onSubmit={submitAuth}>
+            {authMode === "signup" && <label>Nombre completo<input value={authName} onChange={(event) => setAuthName(event.target.value)} required autoComplete="name" /></label>}
+            <label>Correo electrónico<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} required autoComplete="email" /></label>
+            <label>Contraseña<input type="password" minLength={8} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} required autoComplete={authMode === "signin" ? "current-password" : "new-password"} /></label>
+            {authError && <div className="authMessage" role="status">{authError}</div>}
+            <button className="primaryButton" type="submit" disabled={authLoading}>{authLoading ? "Esperá…" : authMode === "signin" ? "Ingresar" : "Crear cuenta"}</button>
+          </form>
+          <button className="authSwitch" type="button" onClick={() => { setAuthMode(authMode === "signin" ? "signup" : "signin"); setAuthError(""); }}>
+            {authMode === "signin" ? "Crear la primera cuenta administradora" : "Ya tengo una cuenta"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (dataLoading || databaseError) {
+    return (
+      <div className="authShell">
+        <div className="authCard connectionCard">
+          <span className="authLogo">IF</span>
+          <p className="eyebrow">Supabase conectado</p>
+          <h1>{dataLoading ? "Cargando información…" : "Falta preparar las tablas"}</h1>
+          <p className="authIntro">{dataLoading ? "Estamos leyendo productos y stock." : databaseError}</p>
+          {!dataLoading && <p className="setupHint">Abrí Supabase → SQL Editor y ejecutá el contenido del archivo <strong>supabase/setup.sql</strong>.</p>}
+          {!dataLoading && <button className="primaryButton" onClick={() => void loadData()}>Volver a comprobar</button>}
+          <button className="authSwitch" type="button" onClick={() => void signOut()}>Cerrar sesión</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="appShell">
       <header className="topbar">
@@ -417,13 +730,16 @@ export default function Home() {
               ))}
             </select>
           </label>
-          <div className="userAvatar" aria-label="Usuario Mariana">MA</div>
+          <button className="userMenu" onClick={() => void signOut()} aria-label="Cerrar sesión">
+            <span className="userAvatar">{profileName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+            <span><strong>{profileName}</strong><small>{profileRole === "admin" ? "Administradora" : profileRole === "manager" ? "Encargada" : "Vendedora"}</small></span>
+          </button>
         </div>
       </header>
 
       <div className="workspace">
         <aside className="sidebar" aria-label="Navegación principal">
-          <div className="statusLine"><span /> Sistema actualizado</div>
+          <div className="statusLine"><span className={realtimeConnected ? "" : "offline"} /> {realtimeConnected ? "Stock en tiempo real" : "Conectando…"}</div>
           <nav>
             {navItems.map((item) => (
               <button
@@ -437,8 +753,8 @@ export default function Home() {
             ))}
           </nav>
           <div className="sidebarNote">
-            <strong>Versión inicial</strong>
-            <p>Los datos de esta pantalla son de prueba.</p>
+            <strong>Supabase conectado</strong>
+            <p>Los cambios quedan guardados y se comparten entre dispositivos.</p>
           </div>
         </aside>
 

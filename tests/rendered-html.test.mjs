@@ -31,11 +31,8 @@ test("server-renders the Indumentaria Fit application", async () => {
   const html = await response.text();
   assert.match(html, /<html lang="es">/i);
   assert.match(html, /<title>Indumentaria Fit · Control interno<\/title>/i);
-  assert.match(html, /Registrar venta/);
-  assert.match(html, /Consultar stock/);
-  assert.match(html, /Ingresar mercadería/);
-  assert.match(html, /Reservas/);
-  assert.match(html, /Movimientos/);
+  assert.match(html, /Indumentaria Fit/);
+  assert.match(html, /Conectando con la base de datos/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -47,7 +44,8 @@ test("keeps the starter preview out of the finished application", async () => {
   ]);
 
   assert.match(page, /Indumentaria Fit/);
-  assert.match(page, /initialProducts/);
+  assert.match(page, /reserve_stock/);
+  assert.match(page, /confirm_reserved_sale/);
   assert.match(layout, /generateMetadata/);
   assert.match(layout, /og\.png/);
   assert.doesNotMatch(page, /SkeletonPreview/);
