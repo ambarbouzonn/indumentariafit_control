@@ -213,9 +213,9 @@ const initialReservations: Reservation[] = [
 ];
 
 const initialMovements: Movement[] = [
-  { id: "MOV-301", type: "Ingreso", detail: "Remera Basic · Negro · M · Local Centro", quantity: 6, date: "Hoy, 10:24", user: "Mariana" },
+  { id: "MOV-301", type: "Ingreso", detail: "Remera Basic · Negro · M · Local Centro", quantity: 6, date: "Hoy, 10:24", user: "Usuario" },
   { id: "MOV-300", type: "Venta", detail: "Palazzo de verano · Negro · S · Local Centro", quantity: -1, date: "Hoy, 09:52", user: "Sofía" },
-  { id: "MOV-299", type: "Reserva", detail: "Palazzo de verano · Crema · S · Local Centro", quantity: -1, date: "Hoy, 09:31", user: "Mariana" },
+  { id: "MOV-299", type: "Reserva", detail: "Palazzo de verano · Crema · S · Local Centro", quantity: -1, date: "Hoy, 09:31", user: "Usuario" },
 ];
 
 const navItems: { view: View; label: string; symbol: string }[] = [
@@ -681,7 +681,7 @@ export default function Home() {
       detail: `${item.product.name} · ${item.variant.color} · ${item.variant.size} · ${item.variant.location}`,
       quantity: -item.quantity,
       date: `Hoy, ${now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`,
-      user: "Mariana",
+      user: profileName,
     }));
 
     setProducts((current) =>
@@ -789,7 +789,7 @@ export default function Home() {
                   detail: `${product.name} · ${variant.color} · ${variant.size} · ${variant.location}`,
                   quantity,
                   date: `Hoy, ${now.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`,
-                  user: "Mariana",
+                  user: profileName,
                 });
                 return { ...variant, onHand: variant.onHand + quantity };
               }),
@@ -1139,7 +1139,7 @@ export default function Home() {
               <div className="pageHeading homeHeading">
                 <div>
                   <p className="eyebrow">Lunes 10 de agosto</p>
-                  <h1>Hola, Mariana</h1>
+                  <h1>Hola, {profileName.trim().split(/\s+/)[0] || "Usuario"}</h1>
                   <p>¿Qué querés hacer ahora?</p>
                 </div>
                 <div className="onlineBadge"><span /> En línea</div>
