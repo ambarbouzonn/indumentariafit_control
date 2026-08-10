@@ -33,6 +33,8 @@ type Product = {
   code: string;
   category: string;
   price: number;
+  imageUrl?: string;
+  colorImages?: Record<string, string>;
   variants: Variant[];
 };
 
@@ -280,6 +282,8 @@ export default function Home() {
   const [transferQuantity, setTransferQuantity] = useState(1);
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [mainPhotoFile, setMainPhotoFile] = useState<File | null>(null);
+  const [colorPhotoFiles, setColorPhotoFiles] = useState<Record<string, File>>({});
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [orderCustomerName, setOrderCustomerName] = useState("");
   const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
@@ -294,7 +298,7 @@ export default function Home() {
     setDataLoading(true);
     setDatabaseError("");
 
-    const [stockResult, reservationResult, movementResult, orderResult, profileResult] = await Promise.all([
+    const [stockResult, reservationResult, movementResult, orderResult, profileResult, photoResult] = await Promise.all([
       supabase
         .from("stock_by_location")
         .select("id, on_hand, reserved, variant_id, location_id, locations(name, active), variants(id, products(id, name, code, price, active, categories(name)), colors(name), sizes(name))")
@@ -315,6 +319,7 @@ export default function Home() {
         .order("created_at", { ascending: false })
         .limit(30),
       supabase.from("profiles").select("full_name, role").single(),
+      supabase.from("products").select("id, image_url, product_color_images(image_url, colors(name))"),
     ]);
 
     const firstError = stockResult.error ?? reservationResult.error ?? movementResult.error ?? orderResult.error ?? profileResult.error;
@@ -328,6 +333,18 @@ export default function Home() {
       return;
     }
 
+    const productPhotos = new Map<string, { imageUrl?: string; colorImages: Record<string, string> }>();
+    if (!photoResult.error) {
+      for (const entry of (photoResult.data ?? []) as unknown as Array<Record<string, any>>) {
+        productPhotos.set(entry.id, {
+          imageUrl: entry.image_url ?? undefined,
+          colorImages: Object.fromEntries((entry.product_color_images ?? []).flatMap((image: Record<string, any>) => {
+            const color = Array.isArray(image.colors) ? image.colors[0] : image.colors;
+            return color?.name && image.image_url ? [[color.name, image.image_url]] : [];
+          })),
+        });
+      }
+    }
     const groupedProducts = new Map<string, Product>();
     for (const rawRow of (stockResult.data ?? []) as unknown as Array<Record<string, any>>) {
       const variantRelation = Array.isArray(rawRow.variants) ? rawRow.variants[0] : rawRow.variants;
@@ -344,6 +361,8 @@ export default function Home() {
           code: productRelation.code,
           category: categoryRelation?.name ?? "Sin categoría",
           price: Number(productRelation.price),
+          imageUrl: productPhotos.get(productRelation.id)?.imageUrl,
+          colorImages: productPhotos.get(productRelation.id)?.colorImages ?? {},
           variants: [],
         });
       }
@@ -975,6 +994,8 @@ export default function Home() {
       showToast("Solo una administradora o encargada puede modificar productos");
       return;
     }
+    setMainPhotoFile(null);
+    setColorPhotoFiles({});
     setProductForm(product ? {
       id: product.id,
       name: product.name,
@@ -984,6 +1005,18 @@ export default function Home() {
       colors: [...new Set(product.variants.map((variant) => variant.color))].join(", "),
       sizes: orderedSizes(product.variants.map((variant) => variant.size)).join(", "),
     } : { ...emptyProductForm });
+  }
+
+  function validPhoto(file: File) {
+    if (!file.type.startsWith("image/")) {
+      showToast("Elegí un archivo de imagen");
+      return false;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      showToast("La foto debe pesar menos de 8 MB");
+      return false;
+    }
+    return true;
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -1001,7 +1034,7 @@ export default function Home() {
     );
     if (!accepted) return;
     setSavingProduct(true);
-    const { error } = await supabase.rpc("save_product", {
+    const { data: savedProductId, error } = await supabase.rpc("save_product", {
       p_product_id: productForm.id,
       p_name: productForm.name.trim(),
       p_code: productForm.code.trim().toUpperCase(),
@@ -1010,12 +1043,38 @@ export default function Home() {
       p_colors: colors,
       p_sizes: sizes,
     });
-    setSavingProduct(false);
     if (error) {
+      setSavingProduct(false);
       showToast(error.message.includes("save_product") ? "Falta ejecutar la actualización SQL de Productos" : error.message);
       return;
     }
+    const productId = String(savedProductId);
+    const photos = [
+      ...(mainPhotoFile ? [{ color: "", file: mainPhotoFile }] : []),
+      ...Object.entries(colorPhotoFiles).map(([color, file]) => ({ color, file })),
+    ];
+    for (const photo of photos) {
+      const extension = photo.file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const safeColor = photo.color.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-") || "principal";
+      const path = `${productId}/${safeColor}-${Date.now()}.${extension}`;
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(path, photo.file, { contentType: photo.file.type, upsert: false });
+      if (uploadError) {
+        setSavingProduct(false);
+        showToast(uploadError.message.includes("Bucket") ? "Falta ejecutar la actualización SQL de Fotos" : `No se pudo subir la foto de ${photo.color || "producto"}`);
+        return;
+      }
+      const { data: publicUrl } = supabase.storage.from("product-images").getPublicUrl(path);
+      const { error: photoError } = await supabase.rpc("set_product_photo", { p_product_id: productId, p_color_name: photo.color || null, p_image_url: publicUrl.publicUrl });
+      if (photoError) {
+        setSavingProduct(false);
+        showToast("Falta ejecutar la actualización SQL de Fotos");
+        return;
+      }
+    }
     setProductForm(null);
+    setSavingProduct(false);
+    setMainPhotoFile(null);
+    setColorPhotoFiles({});
     await loadData();
     showToast(productForm.id ? "Producto actualizado" : "Producto creado correctamente");
   }
@@ -1250,7 +1309,7 @@ export default function Home() {
                     const reserved = variants.reduce((sum, variant) => sum + variant.reserved, 0);
                     return (
                       <button className={`productResult ${stockProductId === product.id ? "selected" : ""}`} key={product.id} onClick={() => { setStockProductId(product.id); setMessageSize(variants[0]?.size ?? "S"); }}>
-                        <span className="productInitial">{product.name.slice(0, 2).toUpperCase()}</span>
+                        {product.imageUrl ? <img className="productThumbnail" src={product.imageUrl} alt="" /> : <span className="productInitial">{product.name.slice(0, 2).toUpperCase()}</span>}
                         <span className="productResultName"><strong>{product.name}</strong><small>{product.code} · {variants.length} variantes</small></span>
                         <span className="productStock"><strong>{available}</strong><small>disponibles</small>{reserved > 0 && <em>{reserved} reservado</em>}</span>
                       </button>
@@ -1261,14 +1320,14 @@ export default function Home() {
                 </aside>
 
                 <div className="stockDetail">
-                  <div className="stockDetailHeading"><div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div>
+                  <div className="stockDetailHeading"><div className="stockProductIdentity">{currentStockProduct.imageUrl && <img src={currentStockProduct.imageUrl} alt={currentStockProduct.name} />}<div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div></div><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div>
                   <div className="stockTotals"><div className="available"><span>Disponible</span><strong>{stockAvailable}</strong></div><div><span>Stock físico</span><strong>{stockOnHand}</strong></div><div className={stockReserved ? "reserved" : ""}><span>Reservado</span><strong>{stockReserved}</strong></div></div>
 
                   <div className="stockLegend"><span><i className="legendAvailable" /> Disponible</span><span><i className="legendLow" /> Quedan 1 o 2</span><span><i className="legendOut" /> Agotado</span></div>
                   <div className="stockMatrixWrap">
                     <table className="stockMatrix">
                       <thead><tr><th>Color</th>{stockSizes.map((size) => <th key={size}>Talle {size}</th>)}</tr></thead>
-                      <tbody>{stockColors.map((color) => <tr key={color}><th scope="row"><span className="colorDot" data-color={color} /><strong>{color}</strong></th>{stockSizes.map((size) => {
+                      <tbody>{stockColors.map((color) => <tr key={color}><th scope="row">{currentStockProduct.colorImages?.[color] ? <img className="colorThumbnail" src={currentStockProduct.colorImages[color]} alt={color} /> : <span className="colorDot" data-color={color} />}<strong>{color}</strong></th>{stockSizes.map((size) => {
                         const variant = stockLocationVariants.find((entry) => entry.color === color && entry.size === size);
                         if (!variant) return <td key={size}><span className="stockUnavailable">—</span></td>;
                         const available = variant.onHand - variant.reserved;
@@ -1284,7 +1343,7 @@ export default function Home() {
                         return variant ? [variant] : [];
                       });
                       return <article className="stockMobileColor" key={color}>
-                        <div className="stockMobileColorHead"><span className="colorDot" data-color={color} /><strong>{color}</strong></div>
+                        <div className="stockMobileColorHead">{currentStockProduct.colorImages?.[color] ? <img className="colorThumbnail" src={currentStockProduct.colorImages[color]} alt={color} /> : <span className="colorDot" data-color={color} />}<strong>{color}</strong></div>
                         <div className="stockMobileSizes">{colorVariants.map((variant) => {
                           const available = variant.onHand - variant.reserved;
                           const status = available <= 0 ? "out" : available <= 2 ? "low" : "ok";
@@ -1395,6 +1454,27 @@ export default function Home() {
                       <label>Categoría<input required value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })} placeholder="Ejemplo: Pantalones" /></label>
                       <label>Colores <small>Separalos con comas</small><input required value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} placeholder="Negro, Crema, Bordó" /></label>
                       <label>Talles <small>Separalos con comas</small><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} placeholder="S, M, L, XL" /></label>
+                      <div className="photoEditor">
+                        <div><strong>Fotos del producto</strong><small>Podés sacarlas con el celular o elegirlas de la galería.</small></div>
+                        <label className="photoUploadRow">
+                          {(mainPhotoFile || products.find((entry) => entry.id === productForm.id)?.imageUrl) ? <img src={mainPhotoFile ? URL.createObjectURL(mainPhotoFile) : products.find((entry) => entry.id === productForm.id)?.imageUrl} alt="Foto principal" /> : <span className="photoPlaceholder">Foto</span>}
+                          <span><strong>Foto principal</strong><small>{mainPhotoFile?.name || "La que se verá en el catálogo"}</small></span>
+                          <b>Elegir</b>
+                          <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file && validPhoto(file)) setMainPhotoFile(file); }} />
+                        </label>
+                        <div className="colorPhotoList">
+                          {[...new Set(productForm.colors.split(",").map((value) => value.trim()).filter(Boolean))].map((color) => {
+                            const selectedFile = colorPhotoFiles[color];
+                            const existingUrl = products.find((entry) => entry.id === productForm.id)?.colorImages?.[color];
+                            return <label className="photoUploadRow" key={color}>
+                              {(selectedFile || existingUrl) ? <img src={selectedFile ? URL.createObjectURL(selectedFile) : existingUrl} alt={color} /> : <span className="photoPlaceholder"><span className="colorDot" data-color={color} /></span>}
+                              <span><strong>{color}</strong><small>{selectedFile?.name || (existingUrl ? "Foto cargada" : "Sin foto propia")}</small></span>
+                              <b>Elegir</b>
+                              <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file && validPhoto(file)) setColorPhotoFiles((current) => ({ ...current, [color]: file })); }} />
+                            </label>;
+                          })}
+                        </div>
+                      </div>
                       <div className="variantSummary"><strong>{productForm.colors.split(",").filter((value) => value.trim()).length * productForm.sizes.split(",").filter((value) => value.trim()).length || 0} variantes</strong><span>Se crea una combinación por cada color y talle. El stock comienza en cero.</span></div>
                       <div className="modalActions"><button type="button" className="secondaryButton" onClick={() => setProductForm(null)}>Cancelar</button><button type="submit" className="primaryButton fit" disabled={savingProduct}>{savingProduct ? "Guardando…" : productForm.id ? "Guardar cambios" : "Crear producto"}</button></div>
                     </form>
@@ -1404,7 +1484,7 @@ export default function Home() {
               <div className="catalogGrid">
                 {products.map((product) => {
                   const total = product.variants.reduce((sum, variant) => sum + variant.onHand, 0);
-                  return <article className="catalogCard" key={product.id}><div className="catalogVisual">{product.name.slice(0, 2).toUpperCase()}</div><div className="catalogBody"><span>{product.category}</span><h2>{product.name}</h2><p>{product.code} · {product.variants.length} variantes</p><div><strong>{formatMoney(product.price)}</strong><small>{total} unidades totales</small></div><div className="productCardActions"><button className="editProductButton" onClick={() => openProductForm(product)}>Editar</button><button className="deleteProductButton" onClick={() => archiveProduct(product)}>Eliminar</button></div></div></article>;
+                  return <article className="catalogCard" key={product.id}>{product.imageUrl ? <img className="catalogVisual catalogPhoto" src={product.imageUrl} alt={product.name} /> : <div className="catalogVisual">{product.name.slice(0, 2).toUpperCase()}</div>}<div className="catalogBody"><span>{product.category}</span><h2>{product.name}</h2><p>{product.code} · {product.variants.length} variantes</p><div><strong>{formatMoney(product.price)}</strong><small>{total} unidades totales</small></div><div className="productCardActions"><button className="editProductButton" onClick={() => openProductForm(product)}>Editar y fotos</button><button className="deleteProductButton" onClick={() => archiveProduct(product)}>Eliminar</button></div></div></article>;
                 })}
               </div>
             </section>

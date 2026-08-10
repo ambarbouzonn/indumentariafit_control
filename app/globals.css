@@ -454,8 +454,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .stockProductPicker .productStock strong { font-size: 16px; }
 .stockProductPicker .productStock small, .stockProductPicker .productStock em { margin: 0; }
 .stockProductPicker .productInitial { width: 40px; height: 40px; }
+.productThumbnail { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; }
 .stockDetail { min-width: 0; padding: 22px; }
 .stockDetailHeading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.stockProductIdentity { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.stockProductIdentity > img { width: 72px; height: 72px; flex: 0 0 auto; border-radius: 15px; object-fit: cover; }
 .stockDetailHeading h2 { margin: 3px 0 4px; font-size: 26px; }
 .stockDetailHeading p:last-child { margin: 0; color: var(--muted); font-size: 12px; }
 .stockTotals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
@@ -480,6 +483,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .stockMatrix thead th:first-child { position: sticky; z-index: 2; left: 0; min-width: 155px; text-align: left; }
 .stockMatrix tbody th { position: sticky; z-index: 1; left: 0; display: flex; align-items: center; gap: 8px; min-width: 155px; height: 83px; background: white; text-align: left; font-size: 12px; }
 .stockMatrix tbody th .colorDot { flex: 0 0 auto; width: 29px; height: 29px; }
+.colorThumbnail { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; object-fit: cover; }
 .stockCell { min-height: 64px; display: grid; place-items: center; align-content: center; padding: 7px; border-radius: 11px; background: var(--green-light); }
 .stockCell strong { color: var(--green-dark); font-size: 25px; line-height: 1; }
 .stockCell span { margin-top: 4px; color: #426653; font-size: 9px; text-transform: uppercase; }
@@ -616,6 +620,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .catalogGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
 .catalogCard { overflow: hidden; border: 1px solid var(--line); border-radius: 19px; background: var(--paper); }
 .catalogVisual { height: 138px; display: grid; place-items: center; background: linear-gradient(145deg, #dce9e1, #eff3ec); color: rgba(23,107,73,.5); font-size: 34px; font-weight: 750; letter-spacing: -0.06em; }
+.catalogPhoto { width: 100%; object-fit: cover; }
 .catalogBody { padding: 17px; }
 .catalogBody > span { color: var(--green); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; }
 .catalogBody h2 { margin: 5px 0 4px; font-size: 17px; }
@@ -638,6 +643,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .productForm label { display: grid; gap: 7px; color: #455149; font-size: 13px; font-weight: 700; }
 .productForm label small { color: var(--muted); font-weight: 500; }
 .productForm input { width: 100%; min-height: 51px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); font-size: 16px; }
+.photoEditor { display: grid; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 15px; background: #fafbf8; }
+.photoEditor > div:first-child > strong, .photoEditor > div:first-child > small { display: block; }
+.photoEditor > div:first-child > small { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.colorPhotoList { display: grid; gap: 8px; }
+.photoUploadRow { position: relative; display: grid !important; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 11px !important; min-height: 64px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 12px; background: white; cursor: pointer; }
+.photoUploadRow > img, .photoPlaceholder { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 9px; background: var(--soft); object-fit: cover; color: var(--muted); font-size: 10px; }
+.photoUploadRow > span:nth-child(2) strong, .photoUploadRow > span:nth-child(2) small { display: block; }
+.photoUploadRow > span:nth-child(2) small { max-width: 270px; margin-top: 3px; overflow: hidden; color: var(--muted); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.photoUploadRow > b { padding: 8px 10px; border-radius: 9px; background: var(--green-light); color: var(--green-dark); font-size: 11px; }
+.photoUploadRow > input { position: absolute; width: 1px; height: 1px; min-height: 0; opacity: 0; }
 .formColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .variantSummary { display: grid; gap: 3px; padding: 13px 15px; border-radius: 12px; background: var(--soft); }
 .variantSummary strong { color: var(--green-dark); }
