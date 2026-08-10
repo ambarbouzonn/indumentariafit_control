@@ -409,6 +409,9 @@ export default function Home() {
   const currentSaleProduct = products.find((product) => product.id === saleProductId) ?? products[0];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
+  const intakeLocationVariants = currentIntakeProduct.variants.filter((variant) => variant.location === location);
+  const intakeColors = [...new Set(intakeLocationVariants.map((variant) => variant.color))];
+  const intakeSizes = [...new Set(intakeLocationVariants.map((variant) => variant.size))];
 
   const cartDetails = cart.flatMap((item) => {
     const product = products.find((entry) => entry.id === item.productId);
@@ -620,13 +623,22 @@ export default function Home() {
   }
 
   async function confirmIntake() {
+    if (profileRole !== "admin" && profileRole !== "manager") {
+      showToast("Solo una administradora o encargada puede ingresar mercadería");
+      return;
+    }
     const entries = Object.entries(intakeValues).filter(([, value]) => Number(value) > 0);
     if (!entries.length) {
       showToast("Ingresá al menos una cantidad");
       return;
     }
     const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
-    if (!window.confirm(`¿Confirmar el ingreso de ${total} unidades en ${location}?`)) return;
+    const lineSummary = entries.slice(0, 5).map(([variantId, quantity]) => {
+      const variant = intakeLocationVariants.find((entry) => entry.id === variantId);
+      return `${variant?.color ?? "Variante"} · ${variant?.size ?? ""}: ${quantity}`;
+    }).join("\n");
+    const remaining = Math.max(0, entries.length - 5);
+    if (!window.confirm(`¿Confirmar el ingreso de ${total} unidades en ${location}?\n\n${lineSummary}${remaining ? `\n…y ${remaining} variantes más` : ""}`)) return;
 
     const databaseLines = entries.flatMap(([variantId, quantity]) => {
       const variant = currentIntakeProduct.variants.find((entry) => entry.id === variantId);
@@ -796,7 +808,7 @@ export default function Home() {
         <div className="topbarActions">
           <label className="locationPicker">
             <span>Ubicación</span>
-            <select value={location} onChange={(event) => setLocation(event.target.value)}>
+            <select value={location} onChange={(event) => { setLocation(event.target.value); setIntakeValues({}); }}>
               {locations.map((entry) => (
                 <option key={entry}>{entry}</option>
               ))}
@@ -967,21 +979,19 @@ export default function Home() {
           {view === "intake" && (
             <section className="pageSection">
               <div className="pageHeading"><div><p className="eyebrow">Stock</p><h1>Ingresar mercadería</h1><p>Cargá las cantidades que llegaron a {location}.</p></div></div>
-              <div className="formCard">
-                <label className="fieldLabel" htmlFor="intake-product">Producto</label>
-                <select id="intake-product" className="largeSelect" value={intakeProductId} onChange={(event) => { setIntakeProductId(event.target.value); setIntakeValues({}); }}>
-                  {products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}
-                </select>
-                <div className="intakeGrid">
-                  <div className="intakeGridHead"><span>Color y talle</span><span>Cantidad recibida</span></div>
-                  {currentIntakeProduct.variants.filter((variant) => variant.location === location).map((variant) => (
-                    <label className="intakeRow" key={variant.id}>
-                      <span><strong>{variant.color}</strong><small>Talle {variant.size} · Actual: {variant.onHand}</small></span>
-                      <input type="number" min="0" inputMode="numeric" value={intakeValues[variant.id] ?? ""} onChange={(event) => setIntakeValues((current) => ({ ...current, [variant.id]: Math.max(0, Number(event.target.value)) }))} placeholder="0" aria-label={`Cantidad de ${variant.color} talle ${variant.size}`} />
-                    </label>
-                  ))}
+              <div className="formCard intakeCard">
+                <div className="intakeControls"><label className="fieldLabel" htmlFor="intake-product">Producto<select id="intake-product" className="largeSelect" value={intakeProductId} onChange={(event) => { setIntakeProductId(event.target.value); setIntakeValues({}); }}>{products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></label><div className="intakeLocation"><span>Ubicación de ingreso</span><strong>{location}</strong></div></div>
+                <div className="intakeHelp"><span>1</span><p>Escribí solamente las cantidades que recibiste. Los casilleros vacíos no modifican el stock.</p></div>
+                <div className="intakeMatrixWrap">
+                  <table className="intakeMatrix">
+                    <thead><tr><th>Color</th>{intakeSizes.map((size) => <th key={size}>Talle {size}</th>)}</tr></thead>
+                    <tbody>{intakeColors.map((color) => <tr key={color}><th scope="row"><span className="colorDot" data-color={color} /><strong>{color}</strong></th>{intakeSizes.map((size) => {
+                      const variant = intakeLocationVariants.find((entry) => entry.color === color && entry.size === size);
+                      return <td key={size}>{variant ? <label><span>Actual: {variant.onHand}</span><input type="number" min="0" step="1" inputMode="numeric" value={intakeValues[variant.id] ?? ""} onChange={(event) => setIntakeValues((current) => ({ ...current, [variant.id]: Math.max(0, Math.floor(Number(event.target.value))) }))} placeholder="0" aria-label={`Cantidad recibida de ${color}, talle ${size}`} /></label> : <span className="notAvailable">—</span>}</td>;
+                    })}</tr>)}</tbody>
+                  </table>
                 </div>
-                <div className="formFooter"><span>Total a ingresar: <strong>{Object.values(intakeValues).reduce((sum, value) => sum + Number(value || 0), 0)}</strong></span><button className="primaryButton fit" onClick={confirmIntake}>Revisar y confirmar</button></div>
+                <div className="formFooter"><span>Total a ingresar: <strong>{Object.values(intakeValues).reduce((sum, value) => sum + Number(value || 0), 0)}</strong></span><div className="intakeActions"><button className="secondaryButton" onClick={() => setIntakeValues({})} disabled={!Object.values(intakeValues).some(Boolean)}>Limpiar</button><button className="primaryButton fit" onClick={confirmIntake} disabled={!Object.values(intakeValues).some((value) => Number(value) > 0)}>Revisar y confirmar</button></div></div>
               </div>
             </section>
           )}

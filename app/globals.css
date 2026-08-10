@@ -452,6 +452,31 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .messagePreview { width: 100%; min-height: 150px; margin: 12px 0; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: #f7f9f6; color: var(--ink); line-height: 1.55; resize: vertical; }
 
 .formCard { max-width: 780px; }
+.intakeCard { max-width: 1050px; }
+.intakeControls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 18px; }
+.intakeControls .fieldLabel { margin: 0; }
+.intakeControls .largeSelect { margin-top: 7px; }
+.intakeLocation { display: grid; gap: 5px; min-width: 190px; padding: 11px 14px; border-radius: 12px; background: var(--soft); }
+.intakeLocation span { color: var(--muted); font-size: 11px; }
+.intakeLocation strong { color: var(--green-dark); font-size: 14px; }
+.intakeHelp { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; color: var(--muted); font-size: 12px; }
+.intakeHelp > span { flex: 0 0 auto; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: white; font-weight: 800; }
+.intakeHelp p { margin: 0; }
+.intakeMatrixWrap { border: 1px solid var(--line); border-radius: 15px; overflow-x: auto; }
+.intakeMatrix { width: 100%; min-width: 620px; border-collapse: collapse; background: white; }
+.intakeMatrix th, .intakeMatrix td { min-width: 125px; padding: 11px; border-right: 1px solid var(--soft-line); border-bottom: 1px solid var(--soft-line); text-align: center; }
+.intakeMatrix tr:last-child th, .intakeMatrix tr:last-child td { border-bottom: 0; }
+.intakeMatrix th:last-child, .intakeMatrix td:last-child { border-right: 0; }
+.intakeMatrix thead th { background: var(--soft); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.intakeMatrix thead th:first-child { position: sticky; z-index: 2; left: 0; min-width: 170px; text-align: left; }
+.intakeMatrix tbody th { position: sticky; z-index: 1; left: 0; display: flex; align-items: center; gap: 9px; min-width: 170px; background: white; text-align: left; font-size: 13px; }
+.intakeMatrix .colorDot { flex: 0 0 auto; width: 29px; height: 29px; }
+.intakeMatrix td label { display: grid; gap: 5px; }
+.intakeMatrix td label span { color: var(--muted); font-size: 10px; }
+.intakeMatrix input { width: 100%; min-height: 44px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: #fbfcfa; text-align: center; font-size: 17px; font-weight: 700; }
+.intakeMatrix input:focus { outline: 2px solid rgba(23,107,73,.2); border-color: var(--green); }
+.notAvailable { color: #b9bfba; }
+.intakeActions { display: flex; gap: 9px; }
 .intakeGrid { margin-top: 8px; border: 1px solid var(--line); border-radius: 15px; overflow: hidden; }
 .intakeGridHead, .intakeRow { display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 15px; padding: 12px 15px; }
 .intakeGridHead { background: var(--soft); color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -583,6 +608,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .productStock { grid-column: 2; display: flex; align-items: baseline; gap: 7px; text-align: left; }
   .productStock strong, .productStock small, .productStock em { display: inline; margin: 0; }
   .intakeGridHead, .intakeRow { grid-template-columns: 1fr 105px; padding: 11px; }
+  .intakeControls { grid-template-columns: 1fr; }
+  .intakeLocation { min-width: 0; }
+  .intakeCard { padding: 17px; }
+  .intakeMatrixWrap { margin-inline: -17px; border-right: 0; border-left: 0; border-radius: 0; }
+  .intakeMatrix { min-width: 570px; }
+  .intakeMatrix th, .intakeMatrix td { min-width: 112px; padding: 9px; }
+  .intakeMatrix thead th:first-child, .intakeMatrix tbody th { min-width: 145px; }
+  .intakeActions { flex-direction: column-reverse; }
   .formFooter { align-items: stretch; flex-direction: column; }
   .formFooter .primaryButton.fit { width: 100%; }
   .reservationCard { grid-template-columns: 1fr; }
