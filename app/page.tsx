@@ -273,6 +273,9 @@ export default function Home() {
   const [includePrice, setIncludePrice] = useState(true);
   const [showQuantities, setShowQuantities] = useState(false);
   const [showStockMessage, setShowStockMessage] = useState(false);
+  const [editingStock, setEditingStock] = useState(false);
+  const [stockEditValues, setStockEditValues] = useState<Record<string, number>>({});
+  const [stockEditReason, setStockEditReason] = useState("Corrección manual de stock");
   const [intakeProductId, setIntakeProductId] = useState(initialProducts[0].id);
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
   const [transferProductId, setTransferProductId] = useState(initialProducts[0].id);
@@ -417,7 +420,7 @@ export default function Home() {
       const profileRelation = Array.isArray(rawMovement.profiles) ? rawMovement.profiles[0] : rawMovement.profiles;
       return {
         id: rawMovement.id,
-        type: rawMovement.movement_type === "sale" ? "Venta" : rawMovement.movement_type === "intake" ? "Ingreso" : rawMovement.movement_type.startsWith("transfer_") ? "Transferencia" : rawMovement.movement_type,
+        type: rawMovement.movement_type === "sale" ? "Venta" : rawMovement.movement_type === "intake" ? "Ingreso" : rawMovement.movement_type === "adjustment" ? "Ajuste" : rawMovement.movement_type === "product_deleted" ? "Eliminación" : rawMovement.movement_type.startsWith("transfer_") ? "Transferencia" : rawMovement.movement_type,
         detail: `${productRelation?.name ?? "Producto"} · ${colorRelation?.name ?? ""} · ${sizeRelation?.name ?? ""} · ${locationRelation?.name ?? ""}`,
         quantity: Number(rawMovement.quantity),
         date: new Date(rawMovement.created_at).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
@@ -1007,6 +1010,36 @@ export default function Home() {
     } : { ...emptyProductForm });
   }
 
+  function openStockEditor() {
+    if (location === "Todo el stock") {
+      showToast("Elegí Depósito o Feria para editar el stock");
+      return;
+    }
+    setStockEditValues(Object.fromEntries(stockLocationVariants.flatMap((variant) => variant.stockId ? [[variant.stockId, variant.onHand]] : [])));
+    setStockEditReason("Corrección manual de stock");
+    setEditingStock(true);
+  }
+
+  async function saveStockChanges() {
+    const changed = stockLocationVariants.flatMap((variant) => {
+      const nextQuantity = variant.stockId ? Number(stockEditValues[variant.stockId] ?? variant.onHand) : variant.onHand;
+      return variant.stockId && nextQuantity !== variant.onHand ? [{ stock_id: variant.stockId, new_quantity: nextQuantity }] : [];
+    });
+    if (!changed.length) {
+      showToast("No cambiaste ninguna cantidad");
+      return;
+    }
+    if (!window.confirm(`¿Guardar ${changed.length} cambio${changed.length === 1 ? "" : "s"} de stock en ${location}?\n\nLos cambios quedarán registrados en Movimientos.`)) return;
+    const { error } = await supabase.rpc("adjust_inventory_stock", { p_lines: changed, p_reason: stockEditReason.trim() || "Corrección manual de stock" });
+    if (error) {
+      showToast(error.message.includes("adjust_inventory_stock") ? "Falta ejecutar la actualización SQL de Inventario" : error.message);
+      return;
+    }
+    setEditingStock(false);
+    await loadData();
+    showToast("Stock actualizado correctamente");
+  }
+
   function validPhoto(file: File) {
     if (!file.type.startsWith("image/")) {
       showToast("Elegí un archivo de imagen");
@@ -1082,11 +1115,7 @@ export default function Home() {
   async function archiveProduct(product: Product) {
     const total = product.variants.reduce((sum, variant) => sum + variant.onHand, 0);
     const reserved = product.variants.reduce((sum, variant) => sum + variant.reserved, 0);
-    if (total > 0 || reserved > 0) {
-      showToast("Primero dejá el stock y las reservas de este producto en cero");
-      return;
-    }
-    if (!window.confirm(`¿Eliminar ${product.name} del catálogo?\n\nEl historial se conservará y esta acción no se puede deshacer desde la aplicación.`)) return;
+    if (!window.confirm(`¿Eliminar ${product.name} del catálogo?\n\nSe quitarán ${total} unidades de stock${reserved ? ` y se cancelarán sus reservas (${reserved} unidades)` : ""}. El historial se conservará.`)) return;
     const { error } = await supabase.rpc("archive_product", { p_product_id: product.id });
     if (error) {
       showToast(error.message.includes("archive_product") ? "Falta ejecutar la actualización SQL de Productos" : error.message);
@@ -1297,6 +1326,22 @@ export default function Home() {
           {view === "stock" && (
             <section className="pageSection">
               <div className="pageHeading"><div><p className="eyebrow">Disponibilidad</p><h1>Consultar stock</h1><p>Ve todo lo disponible por color y talle.</p></div></div>
+              {editingStock && (
+                <div className="modalBackdrop" role="presentation">
+                  <section className="productModal stockEditModal" role="dialog" aria-modal="true" aria-labelledby="stock-edit-title">
+                    <div className="modalHeading"><div><p className="eyebrow">{currentStockProduct.name} · {location}</p><h2 id="stock-edit-title">Editar stock físico</h2></div><button type="button" className="closeButton" onClick={() => setEditingStock(false)} aria-label="Cerrar">×</button></div>
+                    <p className="stockEditIntro">Escribí la cantidad real que hay. Las reservas no se modifican y cada diferencia queda guardada en Movimientos.</p>
+                    <div className="stockEditList">
+                      {stockLocationVariants.map((variant) => <label key={variant.stockId}>
+                        <span><strong>{variant.color} · Talle {variant.size}</strong><small>Actual: {variant.onHand}{variant.reserved ? ` · ${variant.reserved} reservado${variant.reserved === 1 ? "" : "s"}` : ""}</small></span>
+                        <input type="number" min={variant.reserved} step="1" inputMode="numeric" value={variant.stockId ? stockEditValues[variant.stockId] ?? variant.onHand : variant.onHand} onChange={(event) => variant.stockId && setStockEditValues((current) => ({ ...current, [variant.stockId!]: Math.max(0, Math.floor(Number(event.target.value))) }))} aria-label={`Stock físico de ${variant.color}, talle ${variant.size}`} />
+                      </label>)}
+                    </div>
+                    <label className="stockEditReason">Motivo del cambio<input value={stockEditReason} onChange={(event) => setStockEditReason(event.target.value)} placeholder="Ejemplo: Conteo físico" /></label>
+                    <div className="modalActions"><button className="secondaryButton" onClick={() => setEditingStock(false)}>Cancelar</button><button className="primaryButton fit" onClick={saveStockChanges}>Revisar y guardar</button></div>
+                  </section>
+                </div>
+              )}
               <div className="searchBar"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o código" aria-label="Buscar producto" /></div>
               <div className="stockExplorer">
                 <label className="stockMobileProductPicker">Producto<select value={stockProductId} onChange={(event) => { const product = products.find((entry) => entry.id === event.target.value); setStockProductId(event.target.value); setMessageSize(product ? variantsAt(product, location)[0]?.size ?? "S" : "S"); }}>{filteredProducts.map((product) => <option value={product.id} key={product.id}>{product.name} · {product.code}</option>)}</select></label>
@@ -1320,7 +1365,7 @@ export default function Home() {
                 </aside>
 
                 <div className="stockDetail">
-                  <div className="stockDetailHeading"><div className="stockProductIdentity">{currentStockProduct.imageUrl && <img src={currentStockProduct.imageUrl} alt={currentStockProduct.name} />}<div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div></div><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div>
+                  <div className="stockDetailHeading"><div className="stockProductIdentity">{currentStockProduct.imageUrl && <img src={currentStockProduct.imageUrl} alt={currentStockProduct.name} />}<div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div></div><div className="stockHeadingActions"><button className="secondaryButton" onClick={openStockEditor}>Editar stock</button><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div></div>
                   <div className="stockTotals"><div className="available"><span>Disponible</span><strong>{stockAvailable}</strong></div><div><span>Stock físico</span><strong>{stockOnHand}</strong></div><div className={stockReserved ? "reserved" : ""}><span>Reservado</span><strong>{stockReserved}</strong></div></div>
 
                   <div className="stockLegend"><span><i className="legendAvailable" /> Disponible</span><span><i className="legendLow" /> Quedan 1 o 2</span><span><i className="legendOut" /> Agotado</span></div>

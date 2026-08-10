@@ -457,6 +457,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .productThumbnail { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; }
 .stockDetail { min-width: 0; padding: 22px; }
 .stockDetailHeading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.stockHeadingActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .stockProductIdentity { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .stockProductIdentity > img { width: 72px; height: 72px; flex: 0 0 auto; border-radius: 15px; object-fit: cover; }
 .stockDetailHeading h2 { margin: 3px 0 4px; font-size: 26px; }
@@ -653,6 +654,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .photoUploadRow > span:nth-child(2) small { max-width: 270px; margin-top: 3px; overflow: hidden; color: var(--muted); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .photoUploadRow > b { padding: 8px 10px; border-radius: 9px; background: var(--green-light); color: var(--green-dark); font-size: 11px; }
 .photoUploadRow > input { position: absolute; width: 1px; height: 1px; min-height: 0; opacity: 0; }
+.stockEditModal { width: min(100%, 700px); }
+.stockEditIntro { margin: -8px 0 15px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.stockEditList { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; max-height: 48vh; overflow-y: auto; }
+.stockEditList label { display: grid; grid-template-columns: minmax(0, 1fr) 84px; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 12px; }
+.stockEditList label strong, .stockEditList label small { display: block; }
+.stockEditList label strong { font-size: 12px; }
+.stockEditList label small { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.stockEditList input, .stockEditReason input { width: 100%; min-height: 45px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: white; font-size: 16px; }
+.stockEditList input { text-align: center; font-weight: 800; }
+.stockEditReason { display: grid; gap: 6px; margin-top: 14px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .formColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .variantSummary { display: grid; gap: 3px; padding: 13px 15px; border-radius: 12px; background: var(--soft); }
 .variantSummary strong { color: var(--green-dark); }
@@ -748,6 +759,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .stockDetail { padding: 17px; }
   .stockDetailHeading { align-items: stretch; flex-direction: column; gap: 14px; }
   .stockDetailHeading .secondaryButton { width: 100%; flex: none; }
+  .stockHeadingActions { display: grid; grid-template-columns: 1fr 1fr; }
+  .stockEditList { grid-template-columns: 1fr; max-height: 45vh; }
   .stockTotals { gap: 6px; margin: 16px 0 12px; }
   .stockTotals > div { min-width: 0; padding: 10px 8px; }
   .stockTotals span { overflow-wrap: anywhere; font-size: 9px; }
