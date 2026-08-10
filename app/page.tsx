@@ -1221,6 +1221,7 @@ export default function Home() {
               <div className="pageHeading"><div><p className="eyebrow">Disponibilidad</p><h1>Consultar stock</h1><p>Ve todo lo disponible por color y talle.</p></div></div>
               <div className="searchBar"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o código" aria-label="Buscar producto" /></div>
               <div className="stockExplorer">
+                <label className="stockMobileProductPicker">Producto<select value={stockProductId} onChange={(event) => { const product = products.find((entry) => entry.id === event.target.value); setStockProductId(event.target.value); setMessageSize(product ? variantsAt(product, location)[0]?.size ?? "S" : "S"); }}>{filteredProducts.map((product) => <option value={product.id} key={product.id}>{product.name} · {product.code}</option>)}</select></label>
                 <aside className="stockProductPicker">
                   <p className="stockPickerTitle">Elegí un producto</p>
                   <div className="productResults">
@@ -1268,7 +1269,7 @@ export default function Home() {
                         <div className="stockMobileSizes">{colorVariants.map((variant) => {
                           const available = variant.onHand - variant.reserved;
                           const status = available <= 0 ? "out" : available <= 2 ? "low" : "ok";
-                          return <div className={`stockMobileSize ${status}`} key={`${variant.color}-${variant.size}`}><span>Talle {variant.size}</span><strong>{available}</strong><small>{available === 1 ? "unidad" : "unidades"}{variant.reserved > 0 ? ` · ${variant.reserved} reservada${variant.reserved === 1 ? "" : "s"}` : ""}</small></div>;
+                          return <div className={`stockMobileSize ${status}`} key={`${variant.color}-${variant.size}`}><span>{variant.size}</span><strong>{available}</strong>{variant.reserved > 0 && <small>{variant.reserved} reservada{variant.reserved === 1 ? "" : "s"}</small>}</div>;
                         })}</div>
                       </article>;
                     })}
