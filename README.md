@@ -3,6 +3,8 @@
 Base mobile-first para administrar ventas, stock, reservas, ingresos de
 mercadería, productos y movimientos de Indumentaria Fit.
 
+La aplicación utiliza Next.js y está preparada para desplegarse en Vercel.
+
 ## Estado actual
 
 La aplicación usa Supabase para guardar la información, autenticar usuarios y
