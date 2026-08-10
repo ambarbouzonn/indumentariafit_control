@@ -81,7 +81,25 @@ const emptyProductForm: ProductForm = {
   sizes: "S, M, L",
 };
 
-const locations = ["Local Centro", "Depósito", "Feria"];
+const physicalLocations = ["Depósito", "Feria"];
+const locations = ["Todo el stock", ...physicalLocations];
+
+function variantsAt(product: Product, selectedLocation: string) {
+  const visible = product.variants.filter((variant) => physicalLocations.includes(variant.location));
+  if (selectedLocation !== "Todo el stock") return visible.filter((variant) => variant.location === selectedLocation);
+  const grouped = new Map<string, Variant>();
+  for (const variant of visible) {
+    const key = `${variant.color}::${variant.size}`;
+    const current = grouped.get(key);
+    if (current) {
+      current.onHand += variant.onHand;
+      current.reserved += variant.reserved;
+    } else {
+      grouped.set(key, { ...variant, id: `all-${key}`, stockId: undefined, locationId: undefined, location: "Todo el stock" });
+    }
+  }
+  return [...grouped.values()];
+}
 
 const initialProducts: Product[] = [
   {
@@ -197,7 +215,7 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
   const [movements, setMovements] = useState<Movement[]>(initialMovements);
-  const [location, setLocation] = useState("Local Centro");
+  const [location, setLocation] = useState("Depósito");
   const [search, setSearch] = useState("");
   const [saleProductId, setSaleProductId] = useState(initialProducts[0].id);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -213,7 +231,7 @@ export default function Home() {
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
   const [transferProductId, setTransferProductId] = useState(initialProducts[0].id);
   const [transferOrigin, setTransferOrigin] = useState("Depósito");
-  const [transferDestination, setTransferDestination] = useState("Local Centro");
+  const [transferDestination, setTransferDestination] = useState("Feria");
   const [transferStockId, setTransferStockId] = useState("");
   const [transferQuantity, setTransferQuantity] = useState(1);
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
@@ -227,7 +245,7 @@ export default function Home() {
     const [stockResult, reservationResult, movementResult, profileResult] = await Promise.all([
       supabase
         .from("stock_by_location")
-        .select("id, on_hand, reserved, variant_id, location_id, locations(name), variants(id, products(id, name, code, price, categories(name)), colors(name), sizes(name))")
+        .select("id, on_hand, reserved, variant_id, location_id, locations(name, active), variants(id, products(id, name, code, price, active, categories(name)), colors(name), sizes(name))")
         .order("updated_at", { ascending: false }),
       supabase
         .from("reservations")
@@ -261,7 +279,7 @@ export default function Home() {
       const sizeRelation = Array.isArray(variantRelation?.sizes) ? variantRelation.sizes[0] : variantRelation?.sizes;
       const locationRelation = Array.isArray(rawRow.locations) ? rawRow.locations[0] : rawRow.locations;
       const categoryRelation = Array.isArray(productRelation?.categories) ? productRelation.categories[0] : productRelation?.categories;
-      if (!productRelation || !variantRelation || !locationRelation) continue;
+      if (!productRelation || !productRelation.active || !variantRelation || !locationRelation?.active) continue;
       if (!groupedProducts.has(productRelation.id)) {
         groupedProducts.set(productRelation.id, {
           id: productRelation.id,
@@ -420,7 +438,7 @@ export default function Home() {
   const currentTransferProduct = products.find((product) => product.id === transferProductId) ?? products[0];
   const transferOriginVariants = currentTransferProduct.variants.filter((variant) => variant.location === transferOrigin);
   const selectedTransferVariant = transferOriginVariants.find((variant) => variant.stockId === transferStockId);
-  const stockLocationVariants = currentStockProduct.variants.filter((variant) => variant.location === location);
+  const stockLocationVariants = variantsAt(currentStockProduct, location);
   const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
   const stockSizes = [...new Set(stockLocationVariants.map((variant) => variant.size))];
   const stockOnHand = stockLocationVariants.reduce((sum, variant) => sum + variant.onHand, 0);
@@ -450,9 +468,8 @@ export default function Home() {
     );
   }, [products, search]);
 
-  const messageVariants = currentStockProduct.variants.filter(
+  const messageVariants = variantsAt(currentStockProduct, location).filter(
     (variant) =>
-      variant.location === location &&
       variant.size === messageSize &&
       variant.onHand - variant.reserved > 0,
   );
@@ -803,7 +820,25 @@ export default function Home() {
     showToast(productForm.id ? "Producto actualizado" : "Producto creado correctamente");
   }
 
+  async function archiveProduct(product: Product) {
+    const total = product.variants.reduce((sum, variant) => sum + variant.onHand, 0);
+    const reserved = product.variants.reduce((sum, variant) => sum + variant.reserved, 0);
+    if (total > 0 || reserved > 0) {
+      showToast("Primero dejá el stock y las reservas de este producto en cero");
+      return;
+    }
+    if (!window.confirm(`¿Eliminar ${product.name} del catálogo?\n\nEl historial se conservará y esta acción no se puede deshacer desde la aplicación.`)) return;
+    const { error } = await supabase.rpc("archive_product", { p_product_id: product.id });
+    if (error) {
+      showToast(error.message.includes("archive_product") ? "Falta ejecutar la actualización SQL de Productos" : error.message);
+      return;
+    }
+    await loadData();
+    showToast("Producto eliminado del catálogo");
+  }
+
   function navigate(nextView: View) {
+    if (nextView !== "stock" && location === "Todo el stock") setLocation("Depósito");
     setView(nextView);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -865,7 +900,7 @@ export default function Home() {
           <label className="locationPicker">
             <span>Ubicación</span>
             <select value={location} onChange={(event) => { setLocation(event.target.value); setIntakeValues({}); }}>
-              {locations.map((entry) => (
+              {(view === "stock" ? locations : physicalLocations).map((entry) => (
                 <option key={entry}>{entry}</option>
               ))}
             </select>
@@ -1008,7 +1043,7 @@ export default function Home() {
                   <p className="stockPickerTitle">Elegí un producto</p>
                   <div className="productResults">
                   {filteredProducts.map((product) => {
-                    const variants = product.variants.filter((variant) => variant.location === location);
+                    const variants = variantsAt(product, location);
                     const available = variants.reduce((sum, variant) => sum + Math.max(0, variant.onHand - variant.reserved), 0);
                     const reserved = variants.reduce((sum, variant) => sum + variant.reserved, 0);
                     return (
@@ -1091,9 +1126,9 @@ export default function Home() {
               <div className="pageHeading"><div><p className="eyebrow">Movimiento interno</p><h1>Transferir mercadería</h1><p>Mové unidades entre Local, Depósito y Feria sin perder el historial.</p></div></div>
               <div className="transferCard">
                 <div className="transferRoute">
-                  <label>Desde<select value={transferOrigin} onChange={(event) => { const next = event.target.value; setTransferOrigin(next); if (next === transferDestination) setTransferDestination(locations.find((entry) => entry !== next) ?? ""); setTransferStockId(""); }}>{locations.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+                  <label>Desde<select value={transferOrigin} onChange={(event) => { const next = event.target.value; setTransferOrigin(next); if (next === transferDestination) setTransferDestination(physicalLocations.find((entry) => entry !== next) ?? ""); setTransferStockId(""); }}>{physicalLocations.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
                   <span aria-hidden="true">→</span>
-                  <label>Hacia<select value={transferDestination} onChange={(event) => setTransferDestination(event.target.value)}>{locations.filter((entry) => entry !== transferOrigin).map((entry) => <option key={entry}>{entry}</option>)}</select></label>
+                  <label>Hacia<select value={transferDestination} onChange={(event) => setTransferDestination(event.target.value)}>{physicalLocations.filter((entry) => entry !== transferOrigin).map((entry) => <option key={entry}>{entry}</option>)}</select></label>
                 </div>
                 <div className="transferFields">
                   <label>Producto<select value={transferProductId} onChange={(event) => { setTransferProductId(event.target.value); setTransferStockId(""); }}>{products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></label>
@@ -1139,7 +1174,7 @@ export default function Home() {
               <div className="catalogGrid">
                 {products.map((product) => {
                   const total = product.variants.reduce((sum, variant) => sum + variant.onHand, 0);
-                  return <article className="catalogCard" key={product.id}><div className="catalogVisual">{product.name.slice(0, 2).toUpperCase()}</div><div className="catalogBody"><span>{product.category}</span><h2>{product.name}</h2><p>{product.code} · {product.variants.length} variantes</p><div><strong>{formatMoney(product.price)}</strong><small>{total} unidades totales</small></div><button className="editProductButton" onClick={() => openProductForm(product)}>Editar producto</button></div></article>;
+                  return <article className="catalogCard" key={product.id}><div className="catalogVisual">{product.name.slice(0, 2).toUpperCase()}</div><div className="catalogBody"><span>{product.category}</span><h2>{product.name}</h2><p>{product.code} · {product.variants.length} variantes</p><div><strong>{formatMoney(product.price)}</strong><small>{total} unidades totales</small></div><div className="productCardActions"><button className="editProductButton" onClick={() => openProductForm(product)}>Editar</button><button className="deleteProductButton" onClick={() => archiveProduct(product)}>Eliminar</button></div></div></article>;
                 })}
               </div>
             </section>
