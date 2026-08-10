@@ -528,22 +528,21 @@ export default function Home() {
     );
   }, [products, search]);
 
-  const messageVariants = variantsAt(currentStockProduct, location).filter(
-    (variant) =>
-      variant.size === messageSize &&
-      variant.onHand - variant.reserved > 0,
+  const availableMessageVariants = variantsAt(currentStockProduct, location).filter(
+    (variant) => variant.onHand - variant.reserved > 0,
   );
-  const stockMessage = `${currentStockProduct.name}\nTalle ${messageSize}: ${
-    messageVariants.length
-      ? messageVariants
-          .map((variant) =>
-            showQuantities
-              ? `${variant.color} (${variant.onHand - variant.reserved})`
-              : variant.color.toLocaleLowerCase("es"),
-          )
-          .join(", ")
-      : "sin stock disponible"
-  }${includePrice ? `\nPrecio mayorista: ${formatMoney(currentStockProduct.price)}` : ""}`;
+  const formatMessageVariants = (variants: Variant[]) => variants
+    .map((variant) => showQuantities
+      ? `${variant.color.toLocaleLowerCase("es")} (${variant.onHand - variant.reserved})`
+      : variant.color.toLocaleLowerCase("es"))
+    .join(", ");
+  const messageLines = messageSize === "Todos los talles"
+    ? stockSizes.flatMap((size) => {
+        const variants = availableMessageVariants.filter((variant) => variant.size === size);
+        return variants.length ? [`Talle ${size}: ${formatMessageVariants(variants)}`] : [];
+      })
+    : [`Talle ${messageSize}: ${formatMessageVariants(availableMessageVariants.filter((variant) => variant.size === messageSize)) || "sin stock disponible"}`];
+  const stockMessage = `${currentStockProduct.name}\n${messageLines.length ? messageLines.join("\n") : "Sin stock disponible"}${includePrice ? `\nPrecio mayorista: ${formatMoney(currentStockProduct.price)}` : ""}`;
 
   function showToast(message: string) {
     setToast(message);
@@ -1275,7 +1274,7 @@ export default function Home() {
                     })}
                   </div>
 
-                  {showStockMessage && <div className="stockMessagePanel"><div><p className="eyebrow">Mensaje para WhatsApp</p><h3>Preparar mensaje</h3></div><div className="stockMessageOptions"><label>Talle<select value={messageSize} onChange={(event) => setMessageSize(event.target.value)}>{stockSizes.map((size) => <option key={size}>{size}</option>)}</select></label><label className="checkRow"><input type="checkbox" checked={includePrice} onChange={(event) => setIncludePrice(event.target.checked)} /><span>Incluir precio</span></label><label className="checkRow"><input type="checkbox" checked={showQuantities} onChange={(event) => setShowQuantities(event.target.checked)} /><span>Mostrar cantidades</span></label></div><textarea className="messagePreview" readOnly value={stockMessage} aria-label="Vista previa del mensaje" /><button className="primaryButton fit" onClick={copyMessage}>Copiar mensaje</button></div>}
+                  {showStockMessage && <div className="stockMessagePanel"><div><p className="eyebrow">Mensaje para WhatsApp</p><h3>Preparar mensaje</h3></div><div className="stockMessageOptions"><label>Talle<select value={messageSize} onChange={(event) => setMessageSize(event.target.value)}><option>Todos los talles</option>{stockSizes.map((size) => <option key={size}>{size}</option>)}</select></label><label className="checkRow"><input type="checkbox" checked={includePrice} onChange={(event) => setIncludePrice(event.target.checked)} /><span>Incluir precio</span></label><label className="checkRow"><input type="checkbox" checked={showQuantities} onChange={(event) => setShowQuantities(event.target.checked)} /><span>Mostrar cantidades</span></label></div><textarea className="messagePreview" readOnly value={stockMessage} aria-label="Vista previa del mensaje" /><button className="primaryButton fit" onClick={copyMessage}>Copiar mensaje</button></div>}
                 </div>
               </div>
             </section>
