@@ -25,6 +25,7 @@ html { background: var(--canvas); }
 body {
   margin: 0;
   min-width: 320px;
+  overflow-x: hidden;
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-geist), Arial, sans-serif;
@@ -487,6 +488,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .stockCell.out { background: #f0f1ef; }
 .stockCell.out strong, .stockCell.out span { color: #929a94; }
 .stockUnavailable { color: #bac0bb; }
+.stockMobileList { display: none; }
 .stockMessagePanel { margin-top: 18px; padding: 18px; border: 1px solid #d7cdb9; border-radius: 15px; background: #f7f2e8; }
 .stockMessagePanel h3 { margin: 2px 0 13px; font-size: 18px; }
 .stockMessageOptions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; }
@@ -689,7 +691,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .summaryStrip { grid-template-columns: 1fr; }
   .summaryStrip div { border-right: 0; border-bottom: 1px solid var(--line); }
   .summaryStrip div:last-child { border-bottom: 0; }
-  .mobileNav { position: fixed; z-index: 30; left: 10px; right: 10px; bottom: 10px; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,254,250,.96); box-shadow: 0 14px 40px rgba(20,45,31,.16); backdrop-filter: blur(14px); }
+  .mobileNav { position: fixed; z-index: 100; left: 10px; bottom: max(10px, env(safe-area-inset-bottom)); width: calc(100vw - 20px); max-width: calc(100vw - 20px); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 6px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,254,250,.97); box-shadow: 0 14px 40px rgba(20,45,31,.2); backdrop-filter: blur(14px); }
   .mobileNav button { appearance: none; min-width: 0; min-height: 55px; display: grid; place-items: center; align-content: center; gap: 3px; padding: 4px 2px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 9px; font-weight: 650; }
   .mobileNav button span { font-size: 20px; line-height: 1; }
   .mobileNav button.active { background: var(--green-light); color: var(--green-dark); }
@@ -721,20 +723,32 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .productResult { grid-template-columns: auto 1fr; }
   .productStock { grid-column: 2; display: flex; align-items: baseline; gap: 7px; text-align: left; }
   .productStock strong, .productStock small, .productStock em { display: inline; margin: 0; }
-  .stockProductPicker, .stockDetail { border-radius: 16px; }
+  .stockExplorer, .stockProductPicker, .stockDetail { width: 100%; max-width: 100%; min-width: 0; }
+  .stockProductPicker, .stockDetail { border-radius: 16px; overflow: hidden; }
   .stockProductPicker { padding: 12px; }
   .stockProductPicker .productResults { display: flex; gap: 9px; overflow-x: auto; padding-bottom: 4px; }
-  .stockProductPicker .productResult { flex: 0 0 235px; }
+  .stockProductPicker .productResult { flex: 0 0 min(235px, 78vw); min-width: 0; }
   .stockDetail { padding: 17px; }
   .stockDetailHeading { align-items: stretch; flex-direction: column; }
-  .stockDetailHeading .secondaryButton { width: 100%; }
+  .stockDetailHeading .secondaryButton { width: 100%; flex: none; }
   .stockTotals { gap: 6px; }
   .stockTotals > div { padding: 11px 9px; }
   .stockTotals strong { font-size: 22px; }
-  .stockMatrixWrap { margin-inline: -17px; border-right: 0; border-left: 0; border-radius: 0; }
-  .stockMatrix { min-width: 540px; }
-  .stockMatrix th, .stockMatrix td { min-width: 105px; padding: 7px; }
-  .stockMatrix thead th:first-child, .stockMatrix tbody th { min-width: 135px; }
+  .stockMatrixWrap { display: none; }
+  .stockMobileList { display: grid; gap: 11px; }
+  .stockMobileColor { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: white; }
+  .stockMobileColorHead { display: flex; align-items: center; gap: 9px; padding: 12px 13px; border-bottom: 1px solid var(--soft-line); background: #f8faf7; }
+  .stockMobileColorHead .colorDot { width: 30px; height: 30px; flex: 0 0 auto; }
+  .stockMobileColorHead strong { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+  .stockMobileSizes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+  .stockMobileSize { min-width: 0; display: grid; gap: 2px; padding: 11px; border-radius: 11px; background: var(--green-light); }
+  .stockMobileSize > span { color: #426653; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .stockMobileSize > strong { color: var(--green-dark); font-size: 24px; line-height: 1.05; }
+  .stockMobileSize > small { color: var(--muted); font-size: 9px; line-height: 1.3; }
+  .stockMobileSize.low { background: #fff0d7; }
+  .stockMobileSize.low > strong { color: var(--warning); }
+  .stockMobileSize.out { background: #f0f1ef; }
+  .stockMobileSize.out > span, .stockMobileSize.out > strong { color: #89918b; }
   .stockMessagePanel { margin-inline: -5px; padding: 15px; }
   .intakeGridHead, .intakeRow { grid-template-columns: 1fr 105px; padding: 11px; }
   .intakeControls { grid-template-columns: 1fr; }

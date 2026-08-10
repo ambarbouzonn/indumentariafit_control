@@ -1257,6 +1257,22 @@ export default function Home() {
                       })}</tr>)}</tbody>
                     </table>
                   </div>
+                  <div className="stockMobileList">
+                    {stockColors.map((color) => {
+                      const colorVariants = stockSizes.flatMap((size) => {
+                        const variant = stockLocationVariants.find((entry) => entry.color === color && entry.size === size);
+                        return variant ? [variant] : [];
+                      });
+                      return <article className="stockMobileColor" key={color}>
+                        <div className="stockMobileColorHead"><span className="colorDot" data-color={color} /><strong>{color}</strong></div>
+                        <div className="stockMobileSizes">{colorVariants.map((variant) => {
+                          const available = variant.onHand - variant.reserved;
+                          const status = available <= 0 ? "out" : available <= 2 ? "low" : "ok";
+                          return <div className={`stockMobileSize ${status}`} key={`${variant.color}-${variant.size}`}><span>Talle {variant.size}</span><strong>{available}</strong><small>{available === 1 ? "unidad" : "unidades"}{variant.reserved > 0 ? ` · ${variant.reserved} reservada${variant.reserved === 1 ? "" : "s"}` : ""}</small></div>;
+                        })}</div>
+                      </article>;
+                    })}
+                  </div>
 
                   {showStockMessage && <div className="stockMessagePanel"><div><p className="eyebrow">Mensaje para WhatsApp</p><h3>Preparar mensaje</h3></div><div className="stockMessageOptions"><label>Talle<select value={messageSize} onChange={(event) => setMessageSize(event.target.value)}>{stockSizes.map((size) => <option key={size}>{size}</option>)}</select></label><label className="checkRow"><input type="checkbox" checked={includePrice} onChange={(event) => setIncludePrice(event.target.checked)} /><span>Incluir precio</span></label><label className="checkRow"><input type="checkbox" checked={showQuantities} onChange={(event) => setShowQuantities(event.target.checked)} /><span>Mostrar cantidades</span></label></div><textarea className="messagePreview" readOnly value={stockMessage} aria-label="Vista previa del mensaje" /><button className="primaryButton fit" onClick={copyMessage}>Copiar mensaje</button></div>}
                 </div>
