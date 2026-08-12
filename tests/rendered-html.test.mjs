@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("keeps the Vercel-ready application structure", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, stockApp, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/stock-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /Indumentaria Fit/);
+  assert.match(stockApp, /Indumentaria Fit/);
+  assert.match(page, /force-dynamic/);
   assert.match(layout, /<html lang="es">/i);
   assert.match(layout, /Indumentaria Fit · Control de stock/);
   assert.match(packageJson, /"build": "next build"/);
@@ -17,7 +19,7 @@ test("keeps the Vercel-ready application structure", async () => {
 
 test("keeps the starter preview out of the finished application", async () => {
   const [page, layout, packageJson] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/stock-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
