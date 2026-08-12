@@ -528,9 +528,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .stockOverviewSizes > span.out { background: #e9ece9; color: #8b938d; }
 .stockOverviewAction { display: flex; align-items: center; justify-content: flex-end; gap: 7px; color: var(--green); font-size: 10px; font-weight: 800; }
 .stockOverviewEmpty { grid-column: 1 / -1; }
-.stockDetailSection { margin-top: 34px; }
-.stockSectionLabel { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; color: var(--muted); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
-.stockSectionLabel div { height: 1px; flex: 1; background: var(--line); }
+.stockDetailBackdrop { z-index: 70; padding: 24px; }
+.stockEditorBackdrop { z-index: 90; }
+.stockDetailModal { width: min(100%, 1060px); max-height: calc(100vh - 48px); overflow-y: auto; border-radius: 24px; background: var(--canvas); box-shadow: 0 28px 90px rgba(0,0,0,.3); }
+.stockDetailModalTop { position: sticky; z-index: 3; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; border-bottom: 1px solid var(--line); background: rgba(255,254,250,.96); backdrop-filter: blur(12px); }
+.stockDetailModalTop .eyebrow { margin-bottom: 3px; }
+.stockDetailModalTop > div > span { color: var(--muted); font-size: 11px; }
+.stockDetailModal .stockDetail { border: 0; border-radius: 0; box-shadow: none; }
 .productThumbnail { width: 40px; height: 40px; border-radius: 11px; object-fit: cover; }
 .stockDetail { min-width: 0; padding: 22px; }
 .stockDetailHeading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
@@ -855,6 +859,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .stockMobileProductPicker select { width: 100%; min-width: 0; min-height: 52px; padding: 0 38px 0 13px; border: 1px solid var(--line); border-radius: 13px; background: white; color: var(--ink); font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: normal; }
   .stockDetail { border-radius: 16px; overflow: hidden; }
   .stockDetail { padding: 17px; }
+  .stockDetailBackdrop { align-items: end; padding: 0; }
+  .stockDetailModal { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
+  .stockDetailModalTop { padding: 15px 17px; }
+  .stockDetailModal .stockDetail { border-radius: 0; }
   .stockDetailHeading { align-items: stretch; flex-direction: column; gap: 14px; }
   .stockDetailHeading .secondaryButton { width: 100%; flex: none; }
   .stockHeadingActions { display: grid; grid-template-columns: 1fr 1fr; }

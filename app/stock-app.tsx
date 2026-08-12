@@ -246,6 +246,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const [includePrice, setIncludePrice] = useState(true);
   const [showQuantities, setShowQuantities] = useState(false);
   const [showStockMessage, setShowStockMessage] = useState(false);
+  const [showStockDetail, setShowStockDetail] = useState(false);
   const [editingStock, setEditingStock] = useState(false);
   const [stockEditValues, setStockEditValues] = useState<Record<string, number>>({});
   const [stockEditReason, setStockEditReason] = useState("Corrección manual de stock");
@@ -410,6 +411,20 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       .subscribe((status) => setRealtimeConnected(status === "SUBSCRIBED"));
     return () => { void supabase.removeChannel(channel); };
   }, [loadData, session, supabase]);
+
+  useEffect(() => {
+    if (!showStockDetail) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowStockDetail(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [showStockDetail]);
 
   async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -897,6 +912,13 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     setEditingStock(true);
   }
 
+  function openStockDetail(product: Product, variants: Variant[]) {
+    setStockProductId(product.id);
+    setMessageSize(variants[0]?.size ?? "S");
+    setShowStockMessage(false);
+    setShowStockDetail(true);
+  }
+
   async function saveStockChanges() {
     const changed = stockLocationVariants.flatMap((variant) => {
       const nextQuantity = variant.stockId ? Number(stockEditValues[variant.stockId] ?? variant.onHand) : variant.onHand;
@@ -1173,7 +1195,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
             <section className="pageSection">
               <div className="pageHeading stockPageHeading"><div><p className="eyebrow">Vista general</p><h1>Control de stock</h1><p>Todo lo que tenés, ordenado por producto, color y talle.</p></div><button className="primaryButton fit" onClick={() => navigate("intake")}>Ingresar mercadería</button></div>
               {editingStock && (
-                <div className="modalBackdrop" role="presentation">
+                <div className="modalBackdrop stockEditorBackdrop" role="presentation">
                   <section className="productModal stockEditModal" role="dialog" aria-modal="true" aria-labelledby="stock-edit-title">
                     <div className="modalHeading"><div><p className="eyebrow">{currentStockProduct.name} · {location}</p><h2 id="stock-edit-title">Editar stock físico</h2></div><button type="button" className="closeButton" onClick={() => setEditingStock(false)} aria-label="Cerrar">×</button></div>
                     <p className="stockEditIntro">Escribí la cantidad real que hay. Las reservas no se modifican y cada diferencia queda guardada en Movimientos.</p>
@@ -1207,7 +1229,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                   const reserved = variants.reduce((sum, variant) => sum + variant.reserved, 0);
                   const colors = [...new Set(variants.map((variant) => variant.color))];
                   return (
-                    <button className={`stockOverviewCard ${stockProductId === product.id ? "selected" : ""}`} key={product.id} aria-pressed={stockProductId === product.id} onClick={() => { setStockProductId(product.id); setMessageSize(variants[0]?.size ?? "S"); }}>
+                    <button className="stockOverviewCard" key={product.id} aria-label={`Ver detalle de ${product.name}`} onClick={() => openStockDetail(product, variants)}>
                       <span className="stockOverviewHead">
                         {product.imageUrl ? <img className="productThumbnail" src={product.imageUrl} alt="" /> : <span className="productInitial">{product.name.slice(0, 2).toUpperCase()}</span>}
                         <span className="stockOverviewIdentity"><strong>{product.name}</strong><small>{product.code} · {product.category}</small></span>
@@ -1232,10 +1254,12 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                 {!filteredProducts.length && <div className="emptyState stockOverviewEmpty"><span>⌕</span><h2>No encontramos productos</h2><p>Probá con otro nombre o código.</p></div>}
               </div>
 
-              <div className="stockDetailSection">
-                <div className="stockSectionLabel"><span>Detalle seleccionado</span><div /></div>
-                <div className="stockDetail">
-                  <div className="stockDetailHeading"><div className="stockProductIdentity">{currentStockProduct.imageUrl && <img src={currentStockProduct.imageUrl} alt={currentStockProduct.name} />}<div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div></div><div className="stockHeadingActions"><button className="secondaryButton" onClick={openStockEditor}>Editar stock</button><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div></div>
+              {showStockDetail && (
+                <div className="modalBackdrop stockDetailBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowStockDetail(false); }}>
+                  <section className="stockDetailModal" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title">
+                    <div className="stockDetailModalTop"><div><p className="eyebrow">Detalle de producto</p><span>Stock por color y talle</span></div><button type="button" className="closeButton" onClick={() => setShowStockDetail(false)} aria-label="Cerrar detalle">×</button></div>
+                    <div className="stockDetail">
+                  <div className="stockDetailHeading"><div className="stockProductIdentity">{currentStockProduct.imageUrl && <img src={currentStockProduct.imageUrl} alt={currentStockProduct.name} />}<div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2 id="stock-detail-title">{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div></div><div className="stockHeadingActions"><button className="secondaryButton" onClick={openStockEditor}>Editar stock</button><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div></div>
                   <div className="stockTotals"><div className="available"><span>Disponible</span><strong>{stockAvailable}</strong></div><div><span>Stock físico</span><strong>{stockOnHand}</strong></div><div className={stockReserved ? "reserved" : ""}><span>Reservado</span><strong>{stockReserved}</strong></div></div>
 
                   <div className="stockLegend"><span><i className="legendAvailable" /> Disponible</span><span><i className="legendLow" /> Quedan 1 o 2</span><span><i className="legendOut" /> Agotado</span></div>
@@ -1269,8 +1293,10 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                   </div>
 
                   {showStockMessage && <div className="stockMessagePanel"><div><p className="eyebrow">Mensaje para WhatsApp</p><h3>Preparar mensaje</h3></div><div className="stockMessageOptions"><label>Talle<select value={messageSize} onChange={(event) => setMessageSize(event.target.value)}><option>Todos los talles</option>{stockSizes.map((size) => <option key={size}>{size}</option>)}</select></label><label className="checkRow"><input type="checkbox" checked={includePrice} onChange={(event) => setIncludePrice(event.target.checked)} /><span>Incluir precio</span></label><label className="checkRow"><input type="checkbox" checked={showQuantities} onChange={(event) => setShowQuantities(event.target.checked)} /><span>Mostrar cantidades</span></label></div><textarea className="messagePreview" readOnly value={stockMessage} aria-label="Vista previa del mensaje" /><button className="primaryButton fit" onClick={copyMessage}>Copiar mensaje</button></div>}
+                    </div>
+                  </section>
                 </div>
-              </div>
+              )}
             </section>
           )}
 
