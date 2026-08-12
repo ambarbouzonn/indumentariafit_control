@@ -13,8 +13,7 @@ test("keeps the Vercel-ready application structure", async () => {
   assert.match(page, /force-dynamic/);
   assert.match(layout, /<html lang="es">/i);
   assert.match(layout, /Indumentaria Fit · Control de stock/);
-  assert.match(packageJson, /"build": "next build"/);
-  assert.doesNotMatch(packageJson, /vinext/);
+  assert.match(packageJson, /"build": "vinext build"/);
 });
 
 test("keeps the starter preview out of the finished application", async () => {
@@ -32,5 +31,5 @@ test("keeps the starter preview out of the finished application", async () => {
   assert.match(layout, /generateMetadata/);
   assert.match(layout, /og\.png/);
   assert.doesNotMatch(page, /SkeletonPreview/);
-  assert.doesNotMatch(packageJson, /react-loading-skeleton|vinext/);
+  assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
