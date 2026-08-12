@@ -32,6 +32,8 @@ test("keeps the starter preview out of the finished application", async () => {
   assert.match(page, /downloadSaleReceipt/);
   assert.match(page, /openStockDetail/);
   assert.match(page, /stockDetailModal/);
+  assert.match(page, /Talle \$\{size\}:\\n/);
+  assert.match(page, /\$\{variant\.onHand - variant\.reserved\} - \$\{variant\.color\}/);
   assert.match(page, /Confirmar y descargar comprobante/);
   assert.doesNotMatch(page, /view: "home"|view: "transfers"|view: "orders"/);
   assert.match(layout, /generateMetadata/);

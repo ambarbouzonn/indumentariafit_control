@@ -528,16 +528,16 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   );
   const formatMessageVariants = (variants: Variant[]) => variants
     .map((variant) => showQuantities
-      ? `${variant.color.toLocaleLowerCase("es")} (${variant.onHand - variant.reserved})`
-      : variant.color.toLocaleLowerCase("es"))
-    .join(", ");
+      ? `${variant.onHand - variant.reserved} - ${variant.color}`
+      : `- ${variant.color}`)
+    .join("\n");
   const messageLines = messageSize === "Todos los talles"
     ? stockSizes.flatMap((size) => {
         const variants = availableMessageVariants.filter((variant) => variant.size === size);
-        return variants.length ? [`Talle ${size}: ${formatMessageVariants(variants)}`] : [];
+        return variants.length ? [`Talle ${size}:\n${formatMessageVariants(variants)}`] : [];
       })
-    : [`Talle ${messageSize}: ${formatMessageVariants(availableMessageVariants.filter((variant) => variant.size === messageSize)) || "sin stock disponible"}`];
-  const stockMessage = `${currentStockProduct.name}\n${messageLines.length ? messageLines.join("\n") : "Sin stock disponible"}${includePrice ? `\nPrecio mayorista: ${formatMoney(currentStockProduct.price)}` : ""}`;
+    : [`Talle ${messageSize}:\n${formatMessageVariants(availableMessageVariants.filter((variant) => variant.size === messageSize)) || "Sin stock disponible"}`];
+  const stockMessage = `${currentStockProduct.name}\n\n${messageLines.length ? messageLines.join("\n\n") : "Sin stock disponible"}${includePrice ? `\n\nPrecio mayorista: ${formatMoney(currentStockProduct.price)}` : ""}`;
 
   function showToast(message: string) {
     setToast(message);
