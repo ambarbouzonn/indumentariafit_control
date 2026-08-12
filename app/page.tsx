@@ -5,11 +5,9 @@ import type { Session } from "@supabase/supabase-js";
 import { createClient } from "../lib/supabase/client";
 
 type View =
-  | "home"
-  | "sale"
   | "stock"
   | "intake"
-  | "transfers"
+  | "sale"
   | "reservations"
   | "orders"
   | "products"
@@ -221,20 +219,16 @@ const initialMovements: Movement[] = [
 ];
 
 const navItems: { view: View; label: string; symbol: string }[] = [
-  { view: "home", label: "Inicio", symbol: "⌂" },
-  { view: "sale", label: "Vender", symbol: "+" },
   { view: "stock", label: "Stock", symbol: "⌕" },
-  { view: "reservations", label: "Reservas", symbol: "◷" },
-  { view: "orders", label: "Pedidos", symbol: "□" },
   { view: "intake", label: "Ingresos", symbol: "↓" },
-  { view: "transfers", label: "Transferencias", symbol: "⇄" },
+  { view: "sale", label: "Vender", symbol: "+" },
+  { view: "orders", label: "Pedidos", symbol: "□" },
   { view: "products", label: "Productos", symbol: "◇" },
+  { view: "reservations", label: "Reservas", symbol: "◷" },
   { view: "movements", label: "Movimientos", symbol: "↔" },
 ];
 
-const mobileNavItems = navItems.filter((item) =>
-  (["home", "sale", "stock", "products", "orders"] as View[]).includes(item.view),
-);
+const mobileNavItems = navItems;
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-AR", {
@@ -257,11 +251,11 @@ export default function Home() {
   const [dataLoading, setDataLoading] = useState(true);
   const [databaseError, setDatabaseError] = useState("");
   const [realtimeConnected, setRealtimeConnected] = useState(false);
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("stock");
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
   const [movements, setMovements] = useState<Movement[]>(initialMovements);
-  const [location, setLocation] = useState("Depósito");
+  const [location, setLocation] = useState("Todo el stock");
   const [search, setSearch] = useState("");
   const [saleProductId, setSaleProductId] = useState(initialProducts[0].id);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -278,11 +272,6 @@ export default function Home() {
   const [stockEditReason, setStockEditReason] = useState("Corrección manual de stock");
   const [intakeProductId, setIntakeProductId] = useState(initialProducts[0].id);
   const [intakeValues, setIntakeValues] = useState<Record<string, number>>({});
-  const [transferProductId, setTransferProductId] = useState(initialProducts[0].id);
-  const [transferOrigin, setTransferOrigin] = useState("Depósito");
-  const [transferDestination, setTransferDestination] = useState("Feria");
-  const [transferStockId, setTransferStockId] = useState("");
-  const [transferQuantity, setTransferQuantity] = useState(1);
   const [productForm, setProductForm] = useState<ProductForm | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
   const [mainPhotoFile, setMainPhotoFile] = useState<File | null>(null);
@@ -514,29 +503,33 @@ export default function Home() {
 
   const activeReservations = reservations.filter((item) => item.status === "Activa");
   const totalAvailable = products.reduce(
-    (sum, product) =>
-      sum +
-      product.variants.reduce(
-        (variantSum, variant) => variantSum + Math.max(0, variant.onHand - variant.reserved),
-        0,
-      ),
+    (sum, product) => sum + variantsAt(product, location).reduce(
+      (variantSum, variant) => variantSum + Math.max(0, variant.onHand - variant.reserved),
+      0,
+    ),
     0,
   );
   const lowStockCount = products.reduce(
     (sum, product) =>
       sum +
-      product.variants.filter(
-        (variant) => variant.location === location && variant.onHand - variant.reserved <= 2,
+      variantsAt(product, location).filter(
+        (variant) => variant.onHand - variant.reserved > 0 && variant.onHand - variant.reserved <= 2,
       ).length,
     0,
   );
+  const outOfStockCount = products.reduce(
+    (sum, product) => sum + variantsAt(product, location).filter(
+      (variant) => variant.onHand - variant.reserved <= 0,
+    ).length,
+    0,
+  );
+  const productsWithStock = products.filter((product) =>
+    variantsAt(product, location).some((variant) => variant.onHand - variant.reserved > 0),
+  ).length;
 
   const currentSaleProduct = products.find((product) => product.id === saleProductId) ?? products[0];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
-  const currentTransferProduct = products.find((product) => product.id === transferProductId) ?? products[0];
-  const transferOriginVariants = currentTransferProduct.variants.filter((variant) => variant.location === transferOrigin).sort(compareVariantsBySize);
-  const selectedTransferVariant = transferOriginVariants.find((variant) => variant.stockId === transferStockId);
   const currentOrderProduct = products.find((product) => product.id === orderProductId) ?? products[0];
   const orderVariants = [...new Map(currentOrderProduct.variants.filter((variant) => variant.variantId).map((variant) => [variant.variantId, variant])).values()].sort(compareVariantsBySize);
   const orderTotal = orderLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
@@ -691,7 +684,7 @@ export default function Home() {
       setReservationId(null);
       setCustomer("");
       await loadData();
-      setView("home");
+      setView("stock");
       showToast("Venta registrada correctamente");
       return;
     }
@@ -726,7 +719,7 @@ export default function Home() {
     setMovements((current) => [...newMovements, ...current]);
     setCart([]);
     setCustomer("");
-    setView("home");
+    setView("stock");
     showToast("Venta registrada correctamente");
   }
 
@@ -821,45 +814,6 @@ export default function Home() {
     setMovements((current) => [...newMovements, ...current]);
     setIntakeValues({});
     showToast("Mercadería ingresada correctamente");
-  }
-
-  async function confirmTransfer() {
-    if (profileRole !== "admin" && profileRole !== "manager") {
-      showToast("Solo una administradora o encargada puede transferir mercadería");
-      return;
-    }
-    if (!selectedTransferVariant?.stockId || !selectedTransferVariant.variantId) {
-      showToast("Elegí un color y talle");
-      return;
-    }
-    if (transferOrigin === transferDestination) {
-      showToast("El origen y el destino deben ser diferentes");
-      return;
-    }
-    const available = selectedTransferVariant.onHand - selectedTransferVariant.reserved;
-    if (transferQuantity < 1 || transferQuantity > available) {
-      showToast(`Podés transferir entre 1 y ${available} unidades`);
-      return;
-    }
-    const destinationLocationId = products.flatMap((product) => product.variants).find((variant) => variant.location === transferDestination)?.locationId;
-    if (!destinationLocationId) {
-      showToast("No encontramos la ubicación de destino");
-      return;
-    }
-    if (!window.confirm(`¿Transferir ${transferQuantity} unidad${transferQuantity === 1 ? "" : "es"}?\n\n${currentTransferProduct.name}\n${selectedTransferVariant.color} · Talle ${selectedTransferVariant.size}\n${transferOrigin} → ${transferDestination}`)) return;
-    const { error } = await supabase.rpc("transfer_inventory", {
-      p_source_stock_id: selectedTransferVariant.stockId,
-      p_destination_location_id: destinationLocationId,
-      p_quantity: transferQuantity,
-    });
-    if (error) {
-      showToast(error.message.includes("transfer_inventory") ? "Falta ejecutar la actualización SQL de Transferencias" : error.message);
-      return;
-    }
-    setTransferStockId("");
-    setTransferQuantity(1);
-    await loadData();
-    showToast("Transferencia registrada correctamente");
   }
 
   function addOrderLine() {
@@ -1177,11 +1131,11 @@ export default function Home() {
   return (
     <div className="appShell">
       <header className="topbar">
-        <button className="brand" onClick={() => navigate("home")} aria-label="Ir al inicio">
+        <button className="brand" onClick={() => navigate("stock")} aria-label="Ir al control de stock">
           <span className="brandMark">IF</span>
           <span>
             <strong>Indumentaria Fit</strong>
-            <small>Control interno</small>
+            <small>Control de stock</small>
           </span>
         </button>
         <div className="topbarActions">
@@ -1222,51 +1176,6 @@ export default function Home() {
         </aside>
 
         <main className="mainContent">
-          {view === "home" && (
-            <section className="pageSection">
-              <div className="pageHeading homeHeading">
-                <div>
-                  <p className="eyebrow">Lunes 10 de agosto</p>
-                  <h1>Hola, {profileName.trim().split(/\s+/)[0] || "Usuario"}</h1>
-                  <p>¿Qué querés hacer ahora?</p>
-                </div>
-                <div className="onlineBadge"><span /> En línea</div>
-              </div>
-
-              <div className="quickActions">
-                {[
-                  { view: "sale" as View, title: "Registrar venta", detail: "Reserva el stock mientras vendés", symbol: "+", primary: true },
-                  { view: "stock" as View, title: "Consultar stock", detail: "Buscá por talle, color y ubicación", symbol: "⌕" },
-                  { view: "orders" as View, title: "Pedidos", detail: "Encargos y señas de clientes", symbol: "□" },
-                  { view: "intake" as View, title: "Ingresar mercadería", detail: "Cargá cantidades por variante", symbol: "↓" },
-                  { view: "transfers" as View, title: "Transferir mercadería", detail: "Mové stock entre ubicaciones", symbol: "⇄" },
-                  { view: "products" as View, title: "Productos", detail: "Creá, editá o eliminá productos", symbol: "◇" },
-                  { view: "reservations" as View, title: "Reservas", detail: `${activeReservations.length} activa${activeReservations.length === 1 ? "" : "s"}`, symbol: "◷" },
-                  { view: "movements" as View, title: "Movimientos", detail: "Revisá todo lo que cambió", symbol: "↔" },
-                ].map((action) => (
-                  <button
-                    key={action.view}
-                    className={`actionCard ${action.primary ? "primary" : ""}`}
-                    onClick={() => navigate(action.view)}
-                  >
-                    <span className="actionSymbol" aria-hidden="true">{action.symbol}</span>
-                    <span>
-                      <strong>{action.title}</strong>
-                      <small>{action.detail}</small>
-                    </span>
-                    <span className="actionArrow" aria-hidden="true">→</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="summaryStrip">
-                <div><span>Unidades disponibles</span><strong>{totalAvailable}</strong></div>
-                <div><span>Reservas activas</span><strong>{activeReservations.length}</strong></div>
-                <div><span>Stock bajo en {location}</span><strong>{lowStockCount}</strong></div>
-              </div>
-            </section>
-          )}
-
           {view === "sale" && (
             <section className="pageSection">
               <div className="pageHeading">
@@ -1325,7 +1234,7 @@ export default function Home() {
 
           {view === "stock" && (
             <section className="pageSection">
-              <div className="pageHeading"><div><p className="eyebrow">Disponibilidad</p><h1>Consultar stock</h1><p>Ve todo lo disponible por color y talle.</p></div></div>
+              <div className="pageHeading stockPageHeading"><div><p className="eyebrow">Vista general</p><h1>Control de stock</h1><p>Todo lo que tenés, ordenado por producto, color y talle.</p></div><button className="primaryButton fit" onClick={() => navigate("intake")}>Ingresar mercadería</button></div>
               {editingStock && (
                 <div className="modalBackdrop" role="presentation">
                   <section className="productModal stockEditModal" role="dialog" aria-modal="true" aria-labelledby="stock-edit-title">
@@ -1342,28 +1251,52 @@ export default function Home() {
                   </section>
                 </div>
               )}
-              <div className="searchBar"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o código" aria-label="Buscar producto" /></div>
-              <div className="stockExplorer">
-                <label className="stockMobileProductPicker">Producto<select value={stockProductId} onChange={(event) => { const product = products.find((entry) => entry.id === event.target.value); setStockProductId(event.target.value); setMessageSize(product ? variantsAt(product, location)[0]?.size ?? "S" : "S"); }}>{filteredProducts.map((product) => <option value={product.id} key={product.id}>{product.name} · {product.code}</option>)}</select></label>
-                <aside className="stockProductPicker">
-                  <p className="stockPickerTitle">Elegí un producto</p>
-                  <div className="productResults">
-                  {filteredProducts.map((product) => {
-                    const variants = variantsAt(product, location);
-                    const available = variants.reduce((sum, variant) => sum + Math.max(0, variant.onHand - variant.reserved), 0);
-                    const reserved = variants.reduce((sum, variant) => sum + variant.reserved, 0);
-                    return (
-                      <button className={`productResult ${stockProductId === product.id ? "selected" : ""}`} key={product.id} onClick={() => { setStockProductId(product.id); setMessageSize(variants[0]?.size ?? "S"); }}>
-                        {product.imageUrl ? <img className="productThumbnail" src={product.imageUrl} alt="" /> : <span className="productInitial">{product.name.slice(0, 2).toUpperCase()}</span>}
-                        <span className="productResultName"><strong>{product.name}</strong><small>{product.code} · {variants.length} variantes</small></span>
-                        <span className="productStock"><strong>{available}</strong><small>disponibles</small>{reserved > 0 && <em>{reserved} reservado</em>}</span>
-                      </button>
-                    );
-                  })}
-                  {!filteredProducts.length && <div className="emptyState compact"><span>⌕</span><p>No encontramos productos con esa búsqueda.</p></div>}
-                  </div>
-                </aside>
+              <div className="stockSummaryStrip" aria-label={`Resumen de ${location}`}>
+                <div className="stockSummaryMain"><span>Disponibles</span><strong>{totalAvailable}</strong><small>{location}</small></div>
+                <div><span>Productos con stock</span><strong>{productsWithStock}<small> / {products.length}</small></strong></div>
+                <div><span>Stock bajo</span><strong>{lowStockCount}</strong><small>variantes con 1 o 2</small></div>
+                <div><span>Agotados</span><strong>{outOfStockCount}</strong><small>variantes en cero</small></div>
+              </div>
 
+              <div className="stockToolbar">
+                <div><h2>Productos</h2><p>Elegí uno para ampliar el detalle.</p></div>
+                <div className="searchBar"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o código" aria-label="Buscar producto" /></div>
+              </div>
+
+              <div className="stockOverviewGrid">
+                {filteredProducts.map((product) => {
+                  const variants = variantsAt(product, location);
+                  const available = variants.reduce((sum, variant) => sum + Math.max(0, variant.onHand - variant.reserved), 0);
+                  const reserved = variants.reduce((sum, variant) => sum + variant.reserved, 0);
+                  const colors = [...new Set(variants.map((variant) => variant.color))];
+                  return (
+                    <button className={`stockOverviewCard ${stockProductId === product.id ? "selected" : ""}`} key={product.id} aria-pressed={stockProductId === product.id} onClick={() => { setStockProductId(product.id); setMessageSize(variants[0]?.size ?? "S"); }}>
+                      <span className="stockOverviewHead">
+                        {product.imageUrl ? <img className="productThumbnail" src={product.imageUrl} alt="" /> : <span className="productInitial">{product.name.slice(0, 2).toUpperCase()}</span>}
+                        <span className="stockOverviewIdentity"><strong>{product.name}</strong><small>{product.code} · {product.category}</small></span>
+                        <span className="stockOverviewTotal"><strong>{available}</strong><small>disponibles</small>{reserved > 0 && <em>{reserved} reservados</em>}</span>
+                      </span>
+                      <span className="stockOverviewRows">
+                        {colors.map((color) => (
+                          <span className="stockOverviewColor" key={color}>
+                            <span className="stockOverviewColorName">{product.colorImages?.[color] ? <img className="colorThumbnail" src={product.colorImages[color]} alt="" /> : <span className="colorDot" data-color={color} />}<strong>{color}</strong></span>
+                            <span className="stockOverviewSizes">{orderedSizes(variants.filter((variant) => variant.color === color).map((variant) => variant.size)).map((size) => {
+                              const variant = variants.find((entry) => entry.color === color && entry.size === size);
+                              const quantity = Math.max(0, (variant?.onHand ?? 0) - (variant?.reserved ?? 0));
+                              return <span className={quantity <= 0 ? "out" : quantity <= 2 ? "low" : ""} key={size}><b>{size}</b><strong>{quantity}</strong></span>;
+                            })}</span>
+                          </span>
+                        ))}
+                      </span>
+                      <span className="stockOverviewAction">Ver detalle <span aria-hidden="true">→</span></span>
+                    </button>
+                  );
+                })}
+                {!filteredProducts.length && <div className="emptyState stockOverviewEmpty"><span>⌕</span><h2>No encontramos productos</h2><p>Probá con otro nombre o código.</p></div>}
+              </div>
+
+              <div className="stockDetailSection">
+                <div className="stockSectionLabel"><span>Detalle seleccionado</span><div /></div>
                 <div className="stockDetail">
                   <div className="stockDetailHeading"><div className="stockProductIdentity">{currentStockProduct.imageUrl && <img src={currentStockProduct.imageUrl} alt={currentStockProduct.name} />}<div><p className="eyebrow">{currentStockProduct.code} · {location}</p><h2>{currentStockProduct.name}</h2><p>{currentStockProduct.category} · {formatMoney(currentStockProduct.price)}</p></div></div><div className="stockHeadingActions"><button className="secondaryButton" onClick={openStockEditor}>Editar stock</button><button className="secondaryButton" onClick={() => setShowStockMessage((current) => !current)}>{showStockMessage ? "Cerrar mensaje" : "Compartir stock"}</button></div></div>
                   <div className="stockTotals"><div className="available"><span>Disponible</span><strong>{stockAvailable}</strong></div><div><span>Stock físico</span><strong>{stockOnHand}</strong></div><div className={stockReserved ? "reserved" : ""}><span>Reservado</span><strong>{stockReserved}</strong></div></div>
@@ -1439,26 +1372,6 @@ export default function Home() {
                     </article>
                   );
                 })}
-              </div>
-            </section>
-          )}
-
-          {view === "transfers" && (
-            <section className="pageSection">
-              <div className="pageHeading"><div><p className="eyebrow">Movimiento interno</p><h1>Transferir mercadería</h1><p>Mové unidades entre Local, Depósito y Feria sin perder el historial.</p></div></div>
-              <div className="transferCard">
-                <div className="transferRoute">
-                  <label>Desde<select value={transferOrigin} onChange={(event) => { const next = event.target.value; setTransferOrigin(next); if (next === transferDestination) setTransferDestination(physicalLocations.find((entry) => entry !== next) ?? ""); setTransferStockId(""); }}>{physicalLocations.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
-                  <span aria-hidden="true">→</span>
-                  <label>Hacia<select value={transferDestination} onChange={(event) => setTransferDestination(event.target.value)}>{physicalLocations.filter((entry) => entry !== transferOrigin).map((entry) => <option key={entry}>{entry}</option>)}</select></label>
-                </div>
-                <div className="transferFields">
-                  <label>Producto<select value={transferProductId} onChange={(event) => { setTransferProductId(event.target.value); setTransferStockId(""); }}>{products.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></label>
-                  <label>Color y talle<select value={transferStockId} onChange={(event) => setTransferStockId(event.target.value)}><option value="">Elegir variante</option>{transferOriginVariants.map((variant) => { const available = variant.onHand - variant.reserved; return <option value={variant.stockId} key={variant.stockId} disabled={available <= 0}>{variant.color} · Talle {variant.size} · {available} disponible{available === 1 ? "" : "s"}</option>; })}</select></label>
-                  <label>Cantidad<input type="number" min="1" max={Math.max(1, (selectedTransferVariant?.onHand ?? 0) - (selectedTransferVariant?.reserved ?? 0))} inputMode="numeric" value={transferQuantity} onChange={(event) => setTransferQuantity(Math.max(1, Math.floor(Number(event.target.value))))} /></label>
-                </div>
-                {selectedTransferVariant ? <div className="transferAvailability"><span>Disponible para mover</span><strong>{selectedTransferVariant.onHand - selectedTransferVariant.reserved}</strong><small>{selectedTransferVariant.onHand} físico · {selectedTransferVariant.reserved} reservado</small></div> : <div className="transferHint">Elegí una variante para ver cuántas unidades podés mover.</div>}
-                <div className="transferFooter"><p>Al confirmar se descuenta del origen y se suma al destino inmediatamente.</p><button className="primaryButton fit" disabled={!selectedTransferVariant || transferQuantity > selectedTransferVariant.onHand - selectedTransferVariant.reserved} onClick={confirmTransfer}>Revisar y transferir</button></div>
               </div>
             </section>
           )}

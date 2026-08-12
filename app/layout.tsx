@@ -15,21 +15,21 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
 
   return {
-    title: "Indumentaria Fit · Control interno",
-    description: "Ventas, stock, reservas y mercadería de Indumentaria Fit.",
+    title: "Indumentaria Fit · Control de stock",
+    description: "Stock por producto, color y talle, ventas, pedidos y mercadería de Indumentaria Fit.",
     icons: {
       icon: "/favicon.svg",
       shortcut: "/favicon.svg",
     },
     openGraph: {
       title: "Indumentaria Fit",
-      description: "Control interno de ventas, stock y reservas.",
-      images: [{ url: `${origin}/og.png`, width: 1536, height: 864, alt: "Indumentaria Fit · Control interno" }],
+      description: "Control de stock por producto, color y talle.",
+      images: [{ url: `${origin}/og.png`, width: 1536, height: 864, alt: "Indumentaria Fit · Control de stock" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "Indumentaria Fit",
-      description: "Control interno de ventas, stock y reservas.",
+      description: "Control de stock por producto, color y talle.",
       images: [`${origin}/og.png`],
     },
   };
