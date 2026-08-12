@@ -13,7 +13,9 @@ test("keeps the Vercel-ready application structure", async () => {
   assert.match(page, /force-dynamic/);
   assert.match(layout, /<html lang="es">/i);
   assert.match(layout, /Indumentaria Fit · Control de stock/);
-  assert.match(packageJson, /"build": "vinext build"/);
+  assert.match(packageJson, /"build": "next build"/);
+  assert.match(packageJson, /"build:sites": "vinext build"/);
+  assert.match(packageJson, /"next": "16\.2\.6"/);
 });
 
 test("keeps the starter preview out of the finished application", async () => {
