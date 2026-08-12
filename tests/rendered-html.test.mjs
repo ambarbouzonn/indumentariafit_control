@@ -17,9 +17,10 @@ test("keeps the Vercel-ready application structure", async () => {
 });
 
 test("keeps the starter preview out of the finished application", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, globals, packageJson] = await Promise.all([
     readFile(new URL("../app/stock-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
@@ -34,6 +35,9 @@ test("keeps the starter preview out of the finished application", async () => {
   assert.match(page, /stockDetailModal/);
   assert.match(page, /Talle \$\{size\}:\\n/);
   assert.match(page, /\$\{variant\.onHand - variant\.reserved\} - \$\{variant\.color\}/);
+  assert.match(globals, /\.modalBackdrop\.stockDetailBackdrop \{ z-index: 120/);
+  assert.match(globals, /height: 100dvh/);
+  assert.match(globals, /touch-action: pan-y/);
   assert.match(page, /Confirmar y descargar comprobante/);
   assert.doesNotMatch(page, /view: "home"|view: "transfers"|view: "orders"/);
   assert.match(layout, /generateMetadata/);
