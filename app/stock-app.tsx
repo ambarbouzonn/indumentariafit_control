@@ -280,7 +280,6 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const [orderCustomerName, setOrderCustomerName] = useState("");
   const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
   const [orderProductId, setOrderProductId] = useState(initialProducts[0].id);
-  const [orderVariantId, setOrderVariantId] = useState("");
   const [orderQuantity, setOrderQuantity] = useState(1);
   const [orderLines, setOrderLines] = useState<OrderLine[]>([]);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -528,6 +527,8 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   ).length;
 
   const currentSaleProduct = products.find((product) => product.id === saleProductId) ?? products[0];
+  const saleVariants = currentSaleProduct.variants.filter((variant) => variant.location === location).sort(compareVariantsBySize);
+  const saleColors = [...new Set(saleVariants.map((variant) => variant.color))];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
   const currentOrderProduct = products.find((product) => product.id === orderProductId) ?? products[0];
@@ -816,12 +817,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     showToast("Mercadería ingresada correctamente");
   }
 
-  function addOrderLine() {
-    const variant = orderVariants.find((entry) => entry.variantId === orderVariantId);
-    if (!variant) {
-      showToast("Elegí un color y talle");
-      return;
-    }
+  function addOrderLine(variant: Variant) {
     const nextLine: OrderLine = {
       productId: currentOrderProduct.id,
       variantId: variant.variantId ?? null,
@@ -1190,16 +1186,30 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                     {products.map((product) => <option value={product.id} key={product.id}>{product.name} · {formatMoney(product.price)}</option>)}
                   </select>
 
-                  <div className="variantList">
-                    {currentSaleProduct.variants.filter((variant) => variant.location === location).sort(compareVariantsBySize).map((variant) => {
-                      const available = variant.onHand - variant.reserved;
+                  <div className="colorVariantList">
+                    {saleColors.map((color) => {
+                      const variants = saleVariants.filter((variant) => variant.color === color);
+                      const availableByColor = variants.reduce((sum, variant) => sum + Math.max(0, variant.onHand - variant.reserved), 0);
                       return (
-                        <article className="variantRow" key={variant.id}>
-                          <div className="colorDot" data-color={variant.color} aria-hidden="true" />
-                          <div className="variantName"><strong>{variant.color}</strong><span>Talle {variant.size}</span></div>
-                          <div className={`availability ${available <= 1 ? "low" : ""}`}><strong>{available}</strong><span>disponibles</span></div>
-                          <button className="addButton" disabled={available <= 0} onClick={() => addToCart(variant.id)}>{available > 0 ? "Agregar" : "Agotado"}</button>
-                        </article>
+                        <details className="colorVariantGroup" key={color}>
+                          <summary>
+                            <span className="colorVariantIdentity"><span className="colorDot" data-color={color} aria-hidden="true" /><span><strong>{color}</strong><small>{variants.length} talle{variants.length === 1 ? "" : "s"}</small></span></span>
+                            <span className={`colorVariantTotal ${availableByColor <= 2 ? "low" : ""}`}><strong>{availableByColor}</strong><small>disponibles</small></span>
+                            <span className="colorVariantChevron" aria-hidden="true">⌄</span>
+                          </summary>
+                          <div className="sizeVariantList">
+                            {variants.map((variant) => {
+                              const available = variant.onHand - variant.reserved;
+                              return (
+                                <div className="sizeVariantRow" key={variant.id}>
+                                  <span className="sizeBadge">{variant.size}</span>
+                                  <span className={`sizeAvailability ${available <= 2 ? "low" : ""}`}><strong>{Math.max(0, available)}</strong><small>{available === 1 ? "disponible" : "disponibles"}</small></span>
+                                  <button className="addButton" disabled={available <= 0} onClick={() => addToCart(variant.id)}>{available > 0 ? "Agregar" : "Agotado"}</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
                       );
                     })}
                   </div>
@@ -1385,7 +1395,17 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                   <div className="orderCustomerFields"><label>Nombre y apellido<input value={orderCustomerName} onChange={(event) => setOrderCustomerName(event.target.value)} placeholder="Ejemplo: Carla Gómez" /></label><label>Teléfono<input type="tel" inputMode="tel" value={orderCustomerPhone} onChange={(event) => setOrderCustomerPhone(event.target.value)} placeholder="Ejemplo: 11 2345-6789" /></label></div>
                   <div className="orderDivider" />
                   <div className="orderSectionTitle"><span>2</span><div><h2>Agregar productos</h2><p>El precio queda congelado al confirmar el pedido.</p></div></div>
-                  <div className="orderProductFields"><label>Producto<select value={orderProductId} onChange={(event) => { setOrderProductId(event.target.value); setOrderVariantId(""); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {formatMoney(product.price)}</option>)}</select></label><label>Color y talle<select value={orderVariantId} onChange={(event) => setOrderVariantId(event.target.value)}><option value="">Elegir variante</option>{orderVariants.map((variant) => <option key={variant.variantId} value={variant.variantId}>{variant.color} · Talle {variant.size}</option>)}</select></label><label>Cantidad<input type="number" min="1" inputMode="numeric" value={orderQuantity} onChange={(event) => setOrderQuantity(Math.max(1, Math.floor(Number(event.target.value))))} /></label><button className="secondaryButton orderAddButton" onClick={addOrderLine}>Agregar</button></div>
+                  <div className="orderProductFields"><label>Producto<select value={orderProductId} onChange={(event) => setOrderProductId(event.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {formatMoney(product.price)}</option>)}</select></label><label className="orderQuantityField">Cantidad<input type="number" min="1" inputMode="numeric" value={orderQuantity} onChange={(event) => setOrderQuantity(Math.max(1, Math.floor(Number(event.target.value))))} /></label></div>
+                  <p className="orderVariantHelp">Abrí un color y elegí el talle que pidió el cliente.</p>
+                  <div className="colorVariantList orderColorVariantList">
+                    {[...new Set(orderVariants.map((variant) => variant.color))].map((color) => {
+                      const variants = orderVariants.filter((variant) => variant.color === color);
+                      return <details className="colorVariantGroup" key={color}>
+                        <summary><span className="colorVariantIdentity"><span className="colorDot" data-color={color} aria-hidden="true" /><span><strong>{color}</strong><small>{variants.length} talle{variants.length === 1 ? "" : "s"}</small></span></span><span className="colorVariantChevron" aria-hidden="true">⌄</span></summary>
+                        <div className="sizeVariantList">{variants.map((variant) => <div className="sizeVariantRow orderSizeVariantRow" key={variant.variantId}><span className="sizeBadge">{variant.size}</span><span className="orderSizeLabel">Talle {variant.size}</span><button className="addButton" onClick={() => addOrderLine(variant)}>Agregar {orderQuantity}</button></div>)}</div>
+                      </details>;
+                    })}
+                  </div>
                   {orderLines.length === 0 ? <div className="orderEmpty"><span>＋</span><p>Agregá los productos que encargó el cliente.</p></div> : <div className="orderLineList">{orderLines.map((line) => <article key={`${line.productId}-${line.variantId}`}><div><strong>{line.productName}</strong><span>{line.variantLabel}</span><small>{line.quantity} × {formatMoney(line.unitPrice)}</small></div><div><strong>{formatMoney(line.quantity * line.unitPrice)}</strong><button onClick={() => setOrderLines((current) => current.filter((entry) => entry !== line))}>Quitar</button></div></article>)}</div>}
                   <div className="orderTotal"><span>Total del pedido</span><strong>{formatMoney(orderTotal)}</strong></div>
                   <button className="primaryButton" disabled={savingOrder || !orderLines.length || !orderCustomerName.trim() || !orderCustomerPhone.trim()} onClick={createOrder}>{savingOrder ? "Guardando…" : "Revisar y crear pedido"}</button>

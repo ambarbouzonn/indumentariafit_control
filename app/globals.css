@@ -350,6 +350,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .availability strong { font-size: 18px; }
 .availability.low strong { color: var(--warning); }
 
+.colorVariantList { display: grid; gap: 10px; }
+.colorVariantGroup { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
+.colorVariantGroup[open] { border-color: #b9cbbf; box-shadow: 0 8px 25px rgba(26,52,38,.055); }
+.colorVariantGroup summary { min-height: 72px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; padding: 13px 16px; cursor: pointer; list-style: none; user-select: none; }
+.colorVariantGroup summary::-webkit-details-marker { display: none; }
+.colorVariantGroup summary:hover { background: #fafbf8; }
+.colorVariantIdentity { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.colorVariantIdentity .colorDot { flex: 0 0 auto; }
+.colorVariantIdentity > span:last-child, .colorVariantIdentity strong, .colorVariantIdentity small { min-width: 0; display: block; }
+.colorVariantIdentity strong { overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.colorVariantIdentity small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.colorVariantTotal { min-width: 74px; text-align: right; }
+.colorVariantTotal strong, .colorVariantTotal small { display: block; }
+.colorVariantTotal strong { color: var(--green-dark); font-size: 20px; line-height: 1; }
+.colorVariantTotal small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.colorVariantTotal.low strong { color: var(--warning); }
+.colorVariantChevron { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--soft); color: var(--green-dark); font-size: 20px; transition: transform 150ms ease; }
+.colorVariantGroup[open] .colorVariantChevron { transform: rotate(180deg); }
+.sizeVariantList { display: grid; border-top: 1px solid var(--line); background: #f8faf7; }
+.sizeVariantRow { min-height: 62px; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 9px 16px 9px 22px; border-bottom: 1px solid var(--soft-line); }
+.sizeVariantRow:last-child { border-bottom: 0; }
+.sizeBadge { width: 42px; height: 38px; display: grid; place-items: center; border: 1px solid #cbd8cf; border-radius: 10px; background: white; color: var(--green-dark); font-size: 12px; font-weight: 850; text-transform: uppercase; }
+.sizeAvailability strong, .sizeAvailability small { display: block; }
+.sizeAvailability strong { font-size: 16px; line-height: 1; }
+.sizeAvailability small { margin-top: 3px; color: var(--muted); font-size: 9px; }
+.sizeAvailability.low strong { color: var(--warning); }
+
 .addButton, .secondaryButton {
   appearance: none;
   min-height: 42px;
@@ -631,10 +658,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .orderSectionTitle p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .orderCustomerFields, .orderProductFields { display: grid; gap: 12px; margin-top: 16px; }
 .orderCustomerFields { grid-template-columns: 1fr 1fr; }
-.orderProductFields { grid-template-columns: 1fr 1fr 100px auto; align-items: end; }
+.orderProductFields { grid-template-columns: minmax(0, 1fr) 110px; align-items: end; }
 .orderCustomerFields label, .orderProductFields label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .orderCustomerFields input, .orderProductFields input, .orderProductFields select { width: 100%; min-height: 49px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; background: white; color: var(--ink); }
 .orderAddButton { min-height: 49px; }
+.orderVariantHelp { margin: 14px 0 9px; color: var(--muted); font-size: 11px; }
+.orderColorVariantList { gap: 8px; }
+.orderColorVariantList .colorVariantGroup summary { min-height: 64px; }
+.orderColorVariantList .sizeVariantRow { padding-left: 18px; }
+.orderSizeLabel { color: var(--ink); font-size: 12px; font-weight: 700; }
+.orderSizeVariantRow .addButton { min-width: 98px; }
 .orderDivider { margin: 22px 0; border-top: 1px solid var(--line); }
 .orderEmpty { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 18px 0; padding: 22px; border: 1px dashed #cbd4cd; border-radius: 14px; color: var(--muted); }
 .orderEmpty > span { font-size: 22px; }
