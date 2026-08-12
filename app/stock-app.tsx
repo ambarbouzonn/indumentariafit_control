@@ -9,7 +9,6 @@ type View =
   | "intake"
   | "sale"
   | "reservations"
-  | "orders"
   | "products"
   | "movements";
 
@@ -59,26 +58,6 @@ type Movement = {
   quantity: number;
   date: string;
   user: string;
-};
-
-type OrderLine = {
-  productId: string;
-  variantId: string | null;
-  productName: string;
-  variantLabel: string;
-  quantity: number;
-  unitPrice: number;
-};
-
-type CustomerOrder = {
-  id: string;
-  orderNumber: number;
-  customerName: string;
-  customerPhone: string;
-  total: number;
-  status: string;
-  createdAt: string;
-  lines: OrderLine[];
 };
 
 type ProductForm = {
@@ -221,8 +200,7 @@ const initialMovements: Movement[] = [
 const navItems: { view: View; label: string; symbol: string }[] = [
   { view: "stock", label: "Stock", symbol: "⌕" },
   { view: "intake", label: "Ingresos", symbol: "↓" },
-  { view: "sale", label: "Vender", symbol: "+" },
-  { view: "orders", label: "Pedidos", symbol: "□" },
+  { view: "sale", label: "Ventas", symbol: "+" },
   { view: "products", label: "Productos", symbol: "◇" },
   { view: "reservations", label: "Reservas", symbol: "◷" },
   { view: "movements", label: "Movimientos", symbol: "↔" },
@@ -261,6 +239,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const [cart, setCart] = useState<CartItem[]>([]);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const [customer, setCustomer] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Transferencia");
   const [stockProductId, setStockProductId] = useState(initialProducts[0].id);
   const [messageSize, setMessageSize] = useState("S");
@@ -276,20 +255,13 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const [savingProduct, setSavingProduct] = useState(false);
   const [mainPhotoFile, setMainPhotoFile] = useState<File | null>(null);
   const [colorPhotoFiles, setColorPhotoFiles] = useState<Record<string, File>>({});
-  const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [orderCustomerName, setOrderCustomerName] = useState("");
-  const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
-  const [orderProductId, setOrderProductId] = useState(initialProducts[0].id);
-  const [orderQuantity, setOrderQuantity] = useState(1);
-  const [orderLines, setOrderLines] = useState<OrderLine[]>([]);
-  const [savingOrder, setSavingOrder] = useState(false);
   const [toast, setToast] = useState("");
 
-  const loadData = useCallback(async () => {
-    setDataLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setDataLoading(true);
     setDatabaseError("");
 
-    const [stockResult, reservationResult, movementResult, orderResult, profileResult, photoResult] = await Promise.all([
+    const [stockResult, reservationResult, movementResult, profileResult, photoResult] = await Promise.all([
       supabase
         .from("stock_by_location")
         .select("id, on_hand, reserved, variant_id, location_id, locations(name, active), variants(id, products(id, name, code, price, active, categories(name)), colors(name), sizes(name))")
@@ -304,16 +276,11 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
         .select("id, movement_type, quantity, reason, created_at, profiles(full_name), variants(products(name), colors(name), sizes(name)), locations(name)")
         .order("created_at", { ascending: false })
         .limit(40),
-      supabase
-        .from("customer_orders")
-        .select("id, order_number, customer_name, customer_phone, total, status, created_at, customer_order_items(product_id, variant_id, product_name, variant_label, quantity, unit_price)")
-        .order("created_at", { ascending: false })
-        .limit(30),
       supabase.from("profiles").select("full_name, role").single(),
       supabase.from("products").select("id, image_url, product_color_images(image_url, colors(name))"),
     ]);
 
-    const firstError = stockResult.error ?? reservationResult.error ?? movementResult.error ?? orderResult.error ?? profileResult.error;
+    const firstError = stockResult.error ?? reservationResult.error ?? movementResult.error ?? profileResult.error;
     if (firstError) {
       setDatabaseError(
         firstError.message.includes("does not exist") || firstError.code === "PGRST205"
@@ -375,7 +342,6 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       setSaleProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
       setStockProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
       setIntakeProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
-      setOrderProductId((current) => loadedProducts.some((product) => product.id === current) ? current : loadedProducts[0].id);
     }
 
     const loadedReservations: Reservation[] = [];
@@ -416,23 +382,6 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       };
     });
     setMovements(loadedMovements);
-    setOrders(((orderResult.data ?? []) as unknown as Array<Record<string, any>>).map((rawOrder) => ({
-      id: rawOrder.id,
-      orderNumber: Number(rawOrder.order_number),
-      customerName: rawOrder.customer_name,
-      customerPhone: rawOrder.customer_phone,
-      total: Number(rawOrder.total),
-      status: rawOrder.status,
-      createdAt: rawOrder.created_at,
-      lines: (rawOrder.customer_order_items ?? []).map((line: Record<string, any>) => ({
-        productId: line.product_id,
-        variantId: line.variant_id,
-        productName: line.product_name,
-        variantLabel: line.variant_label ?? "",
-        quantity: Number(line.quantity),
-        unitPrice: Number(line.unit_price),
-      })),
-    })));
     setProfileName(profileResult.data?.full_name || session?.user.email?.split("@")[0] || "Usuario");
     setProfileRole(profileResult.data?.role || "seller");
     setDataLoading(false);
@@ -455,11 +404,9 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     void supabase.rpc("release_expired_reservations").then(() => loadData());
     const channel = supabase
       .channel("inventory-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "stock_by_location" }, () => void loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => void loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => void loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "customer_orders" }, () => void loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "customer_order_items" }, () => void loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "stock_by_location" }, () => void loadData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, () => void loadData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_movements" }, () => void loadData(true))
       .subscribe((status) => setRealtimeConnected(status === "SUBSCRIBED"));
     return () => { void supabase.removeChannel(channel); };
   }, [loadData, session, supabase]);
@@ -531,9 +478,6 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const saleColors = [...new Set(saleVariants.map((variant) => variant.color))];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
-  const currentOrderProduct = products.find((product) => product.id === orderProductId) ?? products[0];
-  const orderVariants = [...new Map(currentOrderProduct.variants.filter((variant) => variant.variantId).map((variant) => [variant.variantId, variant])).values()].sort(compareVariantsBySize);
-  const orderTotal = orderLines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0);
   const stockLocationVariants = variantsAt(currentStockProduct, location);
   const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
   const stockSizes = orderedSizes(stockLocationVariants.map((variant) => variant.size));
@@ -600,8 +544,19 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     );
   }
 
-  async function addToCart(variantId: string) {
-    const variant = currentSaleProduct.variants.find((entry) => entry.id === variantId);
+  function changeVariantReserved(productId: string, variantId: string, difference: number) {
+    setProducts((current) => current.map((product) => product.id !== productId ? product : {
+      ...product,
+      variants: product.variants.map((variant) => variant.id !== variantId ? variant : {
+        ...variant,
+        reserved: Math.max(0, variant.reserved + difference),
+      }),
+    }));
+  }
+
+  async function addToCart(productId: string, variantId: string) {
+    const product = products.find((entry) => entry.id === productId);
+    const variant = product?.variants.find((entry) => entry.id === variantId);
     if (!variant || variant.onHand - variant.reserved <= 0) {
       showToast("Esa variante ya no tiene stock disponible");
       return;
@@ -615,25 +570,22 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       });
       if (error) {
         showToast(error.message.includes("Stock insuficiente") ? "Esa variante ya no tiene stock disponible" : error.message);
-        await loadData();
+        await loadData(true);
         return;
       }
       setReservationId(data as string);
-    } else {
-      updateVariant(currentSaleProduct.id, variant.id, { reserved: variant.reserved + 1 });
     }
+    changeVariantReserved(productId, variant.id, 1);
     setCart((current) => {
       const existing = current.find(
-        (item) => item.productId === currentSaleProduct.id && item.variantId === variant.id,
+        (item) => item.productId === productId && item.variantId === variant.id,
       );
       return existing
         ? current.map((item) =>
             item === existing ? { ...item, quantity: item.quantity + 1 } : item,
           )
-        : [...current, { productId: currentSaleProduct.id, variantId: variant.id, quantity: 1 }];
+        : [...current, { productId, variantId: variant.id, quantity: 1 }];
     });
-    if (variant.stockId) await loadData();
-    showToast("Unidad reservada por 15 minutos");
   }
 
   async function removeFromCart(item: CartItem) {
@@ -649,10 +601,9 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
         showToast(error.message);
         return;
       }
-    } else if (variant) {
-      updateVariant(item.productId, item.variantId, {
-        reserved: Math.max(0, variant.reserved - 1),
-      });
+    }
+    if (variant) {
+      changeVariantReserved(item.productId, item.variantId, -1);
     }
     setCart((current) =>
       current.flatMap((entry) => {
@@ -660,7 +611,6 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
         return entry.quantity > 1 ? [{ ...entry, quantity: entry.quantity - 1 }] : [];
       }),
     );
-    if (variant?.stockId) await loadData();
   }
 
   async function confirmSale() {
@@ -669,6 +619,13 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       `¿Confirmar la venta por ${formatMoney(cartTotal)}? El stock se descontará ahora.`,
     );
     if (!accepted) return;
+
+    const completedDetails = cartDetails.map((item) => ({ ...item }));
+    const completedCustomer = customer.trim() || "Consumidor final";
+    const completedPhone = customerPhone.trim() || "No informado";
+    const completedPayment = paymentMethod;
+    const completedTotal = cartTotal;
+    const completedAt = new Date();
 
     if (reservationId) {
       const { error } = await supabase.rpc("confirm_reserved_sale", {
@@ -684,8 +641,10 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       setCart([]);
       setReservationId(null);
       setCustomer("");
+      setCustomerPhone("");
       await loadData();
       setView("stock");
+      downloadSaleReceipt(completedDetails, completedCustomer, completedPhone, completedPayment, completedTotal, completedAt);
       showToast("Venta registrada correctamente");
       return;
     }
@@ -720,7 +679,9 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     setMovements((current) => [...newMovements, ...current]);
     setCart([]);
     setCustomer("");
+    setCustomerPhone("");
     setView("stock");
+    downloadSaleReceipt(completedDetails, completedCustomer, completedPhone, completedPayment, completedTotal, completedAt);
     showToast("Venta registrada correctamente");
   }
 
@@ -817,68 +778,17 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     showToast("Mercadería ingresada correctamente");
   }
 
-  function addOrderLine(variant: Variant) {
-    const nextLine: OrderLine = {
-      productId: currentOrderProduct.id,
-      variantId: variant.variantId ?? null,
-      productName: currentOrderProduct.name,
-      variantLabel: `${variant.color} · Talle ${variant.size}`,
-      quantity: Math.max(1, orderQuantity),
-      unitPrice: currentOrderProduct.price,
-    };
-    setOrderLines((current) => {
-      const existing = current.find((line) => line.productId === nextLine.productId && line.variantId === nextLine.variantId);
-      return existing
-        ? current.map((line) => line === existing ? { ...line, quantity: line.quantity + nextLine.quantity } : line)
-        : [...current, nextLine];
-    });
-    setOrderQuantity(1);
-    showToast("Producto agregado al pedido");
-  }
-
-  async function createOrder() {
-    if (!orderCustomerName.trim() || !orderCustomerPhone.trim()) {
-      showToast("Completá el nombre y el teléfono del cliente");
-      return;
-    }
-    if (!orderLines.length) {
-      showToast("Agregá al menos un producto");
-      return;
-    }
-    if (!window.confirm(`¿Crear el pedido para ${orderCustomerName.trim()} por ${formatMoney(orderTotal)}?\n\nEste pedido no descontará stock.`)) return;
-    setSavingOrder(true);
-    const { data, error } = await supabase.rpc("create_customer_order", {
-      p_customer_name: orderCustomerName.trim(),
-      p_customer_phone: orderCustomerPhone.trim(),
-      p_lines: orderLines.map((line) => ({ product_id: line.productId, variant_id: line.variantId, quantity: line.quantity })),
-    });
-    setSavingOrder(false);
-    if (error) {
-      showToast(error.message.includes("create_customer_order") ? "Falta ejecutar la actualización SQL de Pedidos" : error.message);
-      return;
-    }
-    const result = data as { id: string; order_number: number };
-    const createdOrder: CustomerOrder = {
-      id: result.id,
-      orderNumber: Number(result.order_number),
-      customerName: orderCustomerName.trim(),
-      customerPhone: orderCustomerPhone.trim(),
-      total: orderTotal,
-      status: "ordered",
-      createdAt: new Date().toISOString(),
-      lines: orderLines,
-    };
-    setOrders((current) => [createdOrder, ...current]);
-    setOrderCustomerName("");
-    setOrderCustomerPhone("");
-    setOrderLines([]);
-    await loadData();
-    showToast(`Pedido #${result.order_number} creado correctamente`);
-  }
-
-  function downloadOrderReceipt(order: CustomerOrder) {
+  function downloadSaleReceipt(
+    details: Array<CartItem & { product: Product; variant: Variant }>,
+    customerName: string,
+    phone: string,
+    payment: string,
+    total: number,
+    createdAt: Date,
+  ) {
     const width = 1080;
-    const height = 470 + order.lines.length * 112;
+    const height = 1350;
+    const receiptNumber = createdAt.toISOString().replace(/\D/g, "").slice(0, 14);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -887,47 +797,64 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     context.fillStyle = "#fffefa";
     context.fillRect(0, 0, width, height);
     context.fillStyle = "#176b49";
-    context.fillRect(0, 0, width, 150);
+    context.fillRect(0, 0, width, 220);
     context.fillStyle = "#ffffff";
-    context.font = "700 48px Arial";
-    context.fillText("INDUMENTARIA FIT", 64, 72);
-    context.font = "26px Arial";
-    context.fillText(`Pedido #${order.orderNumber}`, 64, 116);
+    context.font = "700 52px Arial";
+    context.fillText("INDUMENTARIA FIT", 64, 82);
+    context.font = "700 27px Arial";
+    context.fillText("COMPROBANTE DE VENTA", 64, 132);
+    context.font = "22px Arial";
+    context.fillText(`N.º ${receiptNumber}`, 64, 174);
     context.textAlign = "right";
-    context.fillText(new Date(order.createdAt).toLocaleDateString("es-AR"), width - 64, 105);
+    context.fillText(createdAt.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }), width - 64, 174);
     context.textAlign = "left";
+    context.fillStyle = "#f5f1e8";
+    context.fillRect(64, 258, width - 128, 142);
     context.fillStyle = "#17231d";
     context.font = "700 30px Arial";
-    context.fillText(order.customerName, 64, 210);
+    context.fillText(customerName, 92, 310);
     context.fillStyle = "#647068";
-    context.font = "24px Arial";
-    context.fillText(`Teléfono: ${order.customerPhone}`, 64, 248);
-    let y = 310;
+    context.font = "22px Arial";
+    context.fillText(`Teléfono: ${phone}`, 92, 350);
+    context.fillText(`Pago: ${payment}`, 92, 380);
+    const headerY = 456;
+    context.fillStyle = "#17231d";
+    context.font = "700 18px Arial";
+    context.fillText("PRODUCTO", 64, headerY);
+    context.textAlign = "center"; context.fillText("CANT.", 650, headerY);
+    context.textAlign = "right"; context.fillText("UNITARIO", 840, headerY); context.fillText("SUBTOTAL", 1016, headerY);
+    context.textAlign = "left";
+    let y = 512;
+    const rowHeight = Math.max(52, Math.min(82, 520 / Math.max(1, details.length)));
     context.strokeStyle = "#dfe5e0";
-    for (const line of order.lines) {
-      context.beginPath(); context.moveTo(64, y - 26); context.lineTo(width - 64, y - 26); context.stroke();
-      context.fillStyle = "#17231d"; context.font = "700 27px Arial"; context.fillText(line.productName, 64, y);
-      context.fillStyle = "#647068"; context.font = "21px Arial"; context.fillText(line.variantLabel, 64, y + 31);
-      context.textAlign = "right";
-      context.fillStyle = "#17231d"; context.font = "23px Arial"; context.fillText(`${line.quantity} × ${formatMoney(line.unitPrice)}`, width - 64, y);
-      context.font = "700 25px Arial"; context.fillText(formatMoney(line.quantity * line.unitPrice), width - 64, y + 35);
+    for (const item of details) {
+      context.beginPath(); context.moveTo(64, y - 28); context.lineTo(width - 64, y - 28); context.stroke();
+      context.fillStyle = "#17231d"; context.font = "700 22px Arial"; context.fillText(item.product.name.slice(0, 32), 64, y);
+      context.fillStyle = "#647068"; context.font = "18px Arial"; context.fillText(`${item.variant.color} · Talle ${item.variant.size}`, 64, y + 27);
+      context.textAlign = "center"; context.fillStyle = "#17231d"; context.font = "700 22px Arial"; context.fillText(String(item.quantity), 650, y + 8);
+      context.textAlign = "right"; context.font = "20px Arial"; context.fillText(formatMoney(item.product.price), 840, y + 8);
+      context.font = "700 21px Arial"; context.fillText(formatMoney(item.product.price * item.quantity), 1016, y + 8);
       context.textAlign = "left";
-      y += 112;
+      y += rowHeight;
     }
     context.fillStyle = "#e1f0e7";
-    context.fillRect(64, height - 125, width - 128, 76);
+    context.fillRect(64, 1120, width - 128, 118);
     context.fillStyle = "#0f5036";
-    context.font = "700 28px Arial";
-    context.fillText("TOTAL", 92, height - 77);
+    context.font = "700 30px Arial";
+    context.fillText("TOTAL", 92, 1192);
     context.textAlign = "right";
-    context.font = "700 36px Arial";
-    context.fillText(formatMoney(order.total), width - 92, height - 75);
+    context.font = "700 44px Arial";
+    context.fillText(formatMoney(total), width - 92, 1194);
+    context.textAlign = "center";
+    context.fillStyle = "#647068";
+    context.font = "18px Arial";
+    context.fillText("Gracias por tu compra", width / 2, 1292);
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `pedido-${order.orderNumber}-${order.customerName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
+      link.download = `comprobante-${receiptNumber}-${customerName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
       link.click();
       URL.revokeObjectURL(url);
     }, "image/png");
@@ -1175,7 +1102,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
           {view === "sale" && (
             <section className="pageSection">
               <div className="pageHeading">
-                <div><p className="eyebrow">Venta inmediata</p><h1>Registrar venta</h1><p>Elegí un producto y agregá las variantes.</p></div>
+                <div><p className="eyebrow">Venta o encargo</p><h1>Nueva venta</h1><p>Tomá el pedido, ajustá cantidades y descontalo del stock al confirmar.</p></div>
                 {cartDetails.length > 0 && <span className="countBadge">{cartDetails.reduce((sum, item) => sum + item.quantity, 0)} unidades</span>}
               </div>
 
@@ -1204,7 +1131,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                                 <div className="sizeVariantRow" key={variant.id}>
                                   <span className="sizeBadge">{variant.size}</span>
                                   <span className={`sizeAvailability ${available <= 2 ? "low" : ""}`}><strong>{Math.max(0, available)}</strong><small>{available === 1 ? "disponible" : "disponibles"}</small></span>
-                                  <button className="addButton" disabled={available <= 0} onClick={() => addToCart(variant.id)}>{available > 0 ? "Agregar" : "Agotado"}</button>
+                                  <button className="addButton" disabled={available <= 0} onClick={() => addToCart(currentSaleProduct.id, variant.id)}>{available > 0 ? "Agregar" : "Agotado"}</button>
                                 </div>
                               );
                             })}
@@ -1216,7 +1143,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                 </div>
 
                 <aside className="checkoutCard">
-                  <div className="checkoutHeader"><h2>Venta en curso</h2><span>Reserva 15 min</span></div>
+                  <div className="checkoutHeader"><h2>Venta en curso</h2><span>Stock separado</span></div>
                   {cartDetails.length === 0 ? (
                     <div className="emptyState compact"><span>＋</span><p>Todavía no agregaste productos.</p></div>
                   ) : (
@@ -1224,19 +1151,19 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                       {cartDetails.map((item) => (
                         <div className="cartItem" key={`${item.productId}-${item.variantId}`}>
                           <div><strong>{item.product.name}</strong><span>{item.variant.color} · {item.variant.size}</span></div>
-                          <div className="cartQuantity"><span>{item.quantity}</span><button onClick={() => removeFromCart(item)} aria-label={`Quitar una unidad de ${item.product.name}`}>−</button></div>
+                          <div className="cartQuantity"><button onClick={() => removeFromCart(item)} aria-label={`Quitar una unidad de ${item.product.name}`}>−</button><span>{item.quantity}</span><button onClick={() => addToCart(item.productId, item.variantId)} disabled={item.variant.onHand - item.variant.reserved <= 0} aria-label={`Agregar una unidad de ${item.product.name}`}>+</button></div>
                         </div>
                       ))}
                     </div>
                   )}
-                  <label className="fieldLabel" htmlFor="customer">Cliente <span>opcional</span></label>
-                  <input id="customer" className="textInput" value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Nombre o teléfono" />
+                  <div className="saleCustomerFields"><label><span>Nombre del cliente</span><input id="customer" className="textInput" value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Consumidor final" /></label><label><span>Teléfono</span><input className="textInput" type="tel" inputMode="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="Opcional" /></label></div>
                   <label className="fieldLabel" htmlFor="payment">Forma de pago</label>
                   <select id="payment" className="largeSelect" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
                     <option>Transferencia</option><option>Efectivo</option><option>Tarjeta</option><option>Seña</option>
                   </select>
                   <div className="checkoutTotal"><span>Total</span><strong>{formatMoney(cartTotal)}</strong></div>
-                  <button className="primaryButton" disabled={!cartDetails.length} onClick={confirmSale}>Revisar y confirmar</button>
+                  <button className="primaryButton" disabled={!cartDetails.length} onClick={confirmSale}>Confirmar y descargar comprobante</button>
+                  <p className="saleReceiptNotice">Al confirmar se descuenta el stock y se descarga la factura en formato imagen.</p>
                 </aside>
               </div>
             </section>
@@ -1382,39 +1309,6 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                     </article>
                   );
                 })}
-              </div>
-            </section>
-          )}
-
-          {view === "orders" && (
-            <section className="pageSection">
-              <div className="pageHeading"><div><p className="eyebrow">Por encargo</p><h1>Pedidos</h1><p>Creá pedidos sin descontar unidades del stock.</p></div></div>
-              <div className="orderLayout">
-                <div className="orderFormCard">
-                  <div className="orderSectionTitle"><span>1</span><div><h2>Datos del cliente</h2><p>Estos datos aparecerán en el comprobante.</p></div></div>
-                  <div className="orderCustomerFields"><label>Nombre y apellido<input value={orderCustomerName} onChange={(event) => setOrderCustomerName(event.target.value)} placeholder="Ejemplo: Carla Gómez" /></label><label>Teléfono<input type="tel" inputMode="tel" value={orderCustomerPhone} onChange={(event) => setOrderCustomerPhone(event.target.value)} placeholder="Ejemplo: 11 2345-6789" /></label></div>
-                  <div className="orderDivider" />
-                  <div className="orderSectionTitle"><span>2</span><div><h2>Agregar productos</h2><p>El precio queda congelado al confirmar el pedido.</p></div></div>
-                  <div className="orderProductFields"><label>Producto<select value={orderProductId} onChange={(event) => setOrderProductId(event.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {formatMoney(product.price)}</option>)}</select></label><label className="orderQuantityField">Cantidad<input type="number" min="1" inputMode="numeric" value={orderQuantity} onChange={(event) => setOrderQuantity(Math.max(1, Math.floor(Number(event.target.value))))} /></label></div>
-                  <p className="orderVariantHelp">Abrí un color y elegí el talle que pidió el cliente.</p>
-                  <div className="colorVariantList orderColorVariantList">
-                    {[...new Set(orderVariants.map((variant) => variant.color))].map((color) => {
-                      const variants = orderVariants.filter((variant) => variant.color === color);
-                      return <details className="colorVariantGroup" key={color}>
-                        <summary><span className="colorVariantIdentity"><span className="colorDot" data-color={color} aria-hidden="true" /><span><strong>{color}</strong><small>{variants.length} talle{variants.length === 1 ? "" : "s"}</small></span></span><span className="colorVariantChevron" aria-hidden="true">⌄</span></summary>
-                        <div className="sizeVariantList">{variants.map((variant) => <div className="sizeVariantRow orderSizeVariantRow" key={variant.variantId}><span className="sizeBadge">{variant.size}</span><span className="orderSizeLabel">Talle {variant.size}</span><button className="addButton" onClick={() => addOrderLine(variant)}>Agregar {orderQuantity}</button></div>)}</div>
-                      </details>;
-                    })}
-                  </div>
-                  {orderLines.length === 0 ? <div className="orderEmpty"><span>＋</span><p>Agregá los productos que encargó el cliente.</p></div> : <div className="orderLineList">{orderLines.map((line) => <article key={`${line.productId}-${line.variantId}`}><div><strong>{line.productName}</strong><span>{line.variantLabel}</span><small>{line.quantity} × {formatMoney(line.unitPrice)}</small></div><div><strong>{formatMoney(line.quantity * line.unitPrice)}</strong><button onClick={() => setOrderLines((current) => current.filter((entry) => entry !== line))}>Quitar</button></div></article>)}</div>}
-                  <div className="orderTotal"><span>Total del pedido</span><strong>{formatMoney(orderTotal)}</strong></div>
-                  <button className="primaryButton" disabled={savingOrder || !orderLines.length || !orderCustomerName.trim() || !orderCustomerPhone.trim()} onClick={createOrder}>{savingOrder ? "Guardando…" : "Revisar y crear pedido"}</button>
-                  <p className="orderStockNotice">Este pedido es por encargo y no modifica el stock disponible.</p>
-                </div>
-                <aside className="recentOrders">
-                  <div><p className="eyebrow">Últimos pedidos</p><h2>Comprobantes</h2></div>
-                  {orders.length === 0 ? <div className="emptyState compact"><span>□</span><p>Todavía no hay pedidos registrados.</p></div> : <div className="recentOrderList">{orders.map((order) => <article key={order.id}><div className="recentOrderHead"><span>Pedido #{order.orderNumber}</span><small>{new Date(order.createdAt).toLocaleDateString("es-AR")}</small></div><h3>{order.customerName}</h3><p>{order.customerPhone} · {order.lines.reduce((sum, line) => sum + line.quantity, 0)} unidades</p><strong>{formatMoney(order.total)}</strong><button className="secondaryButton" onClick={() => downloadOrderReceipt(order)}>Descargar imagen</button></article>)}</div>}
-                </aside>
               </div>
             </section>
           )}

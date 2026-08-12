@@ -29,7 +29,9 @@ test("keeps the starter preview out of the finished application", async () => {
   assert.match(page, /stockOverviewGrid/);
   assert.match(page, /colorVariantGroup/);
   assert.match(page, /saleColors\.map/);
-  assert.doesNotMatch(page, /view: "home"|view: "transfers"/);
+  assert.match(page, /downloadSaleReceipt/);
+  assert.match(page, /Confirmar y descargar comprobante/);
+  assert.doesNotMatch(page, /view: "home"|view: "transfers"|view: "orders"/);
   assert.match(layout, /generateMetadata/);
   assert.match(layout, /og\.png/);
   assert.doesNotMatch(page, /SkeletonPreview/);

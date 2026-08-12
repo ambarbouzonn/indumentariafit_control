@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: "Indumentaria Fit · Control de stock",
-    description: "Stock por producto, color y talle, ventas, pedidos y mercadería de Indumentaria Fit.",
+    description: "Stock por producto, color y talle, ventas, comprobantes y mercadería de Indumentaria Fit.",
     icons: {
       icon: "/favicon.svg",
       shortcut: "/favicon.svg",

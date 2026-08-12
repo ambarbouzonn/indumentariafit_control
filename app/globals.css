@@ -415,6 +415,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .cartQuantity { display: flex; align-items: center; gap: 8px; }
 .cartQuantity span { margin: 0; color: var(--ink); font-size: 14px; font-weight: 700; }
 .cartQuantity button { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 9px; background: white; cursor: pointer; }
+.cartQuantity button:disabled { cursor: not-allowed; opacity: .42; }
+.saleCustomerFields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.saleCustomerFields label { color: #39443d; font-size: 11px; font-weight: 700; }
+.saleCustomerFields label > span { display: block; margin-bottom: 7px; }
+.saleCustomerFields .textInput { margin-bottom: 15px; }
+.saleReceiptNotice { margin: 10px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; text-align: center; }
 
 .emptyState { padding: 42px 20px; border: 1px dashed #cbd4cd; border-radius: 18px; background: rgba(255,255,255,.45); text-align: center; }
 .emptyState.compact { margin-bottom: 18px; padding: 25px 15px; }
@@ -815,6 +821,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .orderProductFields .orderAddButton { width: 100%; }
   .nextTag { grid-column: 1 / -1; justify-self: start; }
   .stockOverviewGrid { grid-template-columns: 1fr; }
+  .saleCustomerFields { grid-template-columns: 1fr; gap: 0; }
 }
 
 @media (max-width: 510px) {
