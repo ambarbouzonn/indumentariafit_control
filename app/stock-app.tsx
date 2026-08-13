@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createClient } from "../lib/supabase/client";
+import PhotoCropper from "./photo-cropper";
 
 type View =
   | "stock"
@@ -68,6 +69,14 @@ type ProductForm = {
   price: string;
   colors: string;
   sizes: string;
+};
+
+type PhotoTarget = { kind: "main" } | { kind: "color"; color: string };
+
+type PhotoEditorState = {
+  file: File;
+  target: PhotoTarget;
+  title: string;
 };
 
 const emptyProductForm: ProductForm = {
@@ -215,6 +224,18 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+function PhotoPreview({ file, url, alt }: { file?: File | null; url?: string; alt: string }) {
+  const fileUrl = useMemo(() => file ? URL.createObjectURL(file) : "", [file]);
+
+  useEffect(() => () => {
+    if (fileUrl) URL.revokeObjectURL(fileUrl);
+  }, [fileUrl]);
+
+  // This preview may use a temporary blob URL, which is not compatible with Next Image.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={fileUrl || url} alt={alt} />;
+}
+
 export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supabaseUrl: string; supabasePublishableKey: string }) {
   const supabase = useMemo(() => createClient(supabaseUrl, supabasePublishableKey), [supabasePublishableKey, supabaseUrl]);
   const [session, setSession] = useState<Session | null>(null);
@@ -256,6 +277,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const [savingProduct, setSavingProduct] = useState(false);
   const [mainPhotoFile, setMainPhotoFile] = useState<File | null>(null);
   const [colorPhotoFiles, setColorPhotoFiles] = useState<Record<string, File>>({});
+  const [photoEditor, setPhotoEditor] = useState<PhotoEditorState | null>(null);
   const [toast, setToast] = useState("");
 
   const loadData = useCallback(async (silent = false) => {
@@ -493,6 +515,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
   const saleColors = [...new Set(saleVariants.map((variant) => variant.color))];
   const currentStockProduct = products.find((product) => product.id === stockProductId) ?? products[0];
   const currentIntakeProduct = products.find((product) => product.id === intakeProductId) ?? products[0];
+  const editingProduct = productForm?.id ? products.find((product) => product.id === productForm.id) : undefined;
   const stockLocationVariants = variantsAt(currentStockProduct, location);
   const stockColors = [...new Set(stockLocationVariants.map((variant) => variant.color))];
   const stockSizes = orderedSizes(stockLocationVariants.map((variant) => variant.size));
@@ -891,6 +914,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
     }
     setMainPhotoFile(null);
     setColorPhotoFiles({});
+    setPhotoEditor(null);
     setProductForm(product ? {
       id: product.id,
       name: product.name,
@@ -949,6 +973,44 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
       return false;
     }
     return true;
+  }
+
+  function choosePhoto(file: File | undefined, target: PhotoTarget, title: string) {
+    if (!file || !validPhoto(file)) return;
+    setPhotoEditor({ file, target, title });
+  }
+
+  async function adjustPhoto(file: File | null | undefined, url: string | undefined, target: PhotoTarget, title: string) {
+    if (file) {
+      setPhotoEditor({ file, target, title });
+      return;
+    }
+    if (!url) return;
+    try {
+      showToast("Preparando la foto para editar…");
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("No se pudo descargar la foto");
+      const blob = await response.blob();
+      const source = new File([blob], `${title.toLocaleLowerCase("es").replace(/[^a-z0-9]+/gi, "-") || "producto"}.jpg`, {
+        type: blob.type || "image/jpeg",
+        lastModified: Date.now(),
+      });
+      if (validPhoto(source)) setPhotoEditor({ file: source, target, title });
+    } catch {
+      showToast("No se pudo abrir esa foto. Elegila nuevamente desde tu dispositivo.");
+    }
+  }
+
+  function applyPhotoCrop(file: File) {
+    if (!photoEditor) return;
+    if (photoEditor.target.kind === "main") {
+      setMainPhotoFile(file);
+    } else {
+      const color = photoEditor.target.color;
+      setColorPhotoFiles((current) => ({ ...current, [color]: file }));
+    }
+    setPhotoEditor(null);
+    showToast("Recorte listo. Se guardará junto con el producto.");
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -1353,23 +1415,27 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                       <label>Colores <small>Separalos con comas</small><input required value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} placeholder="Negro, Crema, Bordó" /></label>
                       <label>Talles <small>Separalos con comas</small><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} placeholder="S, M, L, XL" /></label>
                       <div className="photoEditor">
-                        <div><strong>Fotos del producto</strong><small>Podés sacarlas con el celular o elegirlas de la galería.</small></div>
-                        <label className="photoUploadRow">
-                          {(mainPhotoFile || products.find((entry) => entry.id === productForm.id)?.imageUrl) ? <img src={mainPhotoFile ? URL.createObjectURL(mainPhotoFile) : products.find((entry) => entry.id === productForm.id)?.imageUrl} alt="Foto principal" /> : <span className="photoPlaceholder">Foto</span>}
+                        <div><strong>Fotos del producto</strong><small>Elegí una foto y después acomodala, acercala o recortala como quieras.</small></div>
+                        <div className="photoUploadRow">
+                          {(mainPhotoFile || editingProduct?.imageUrl) ? <PhotoPreview file={mainPhotoFile} url={editingProduct?.imageUrl} alt="Foto principal" /> : <span className="photoPlaceholder">Foto</span>}
                           <span><strong>Foto principal</strong><small>{mainPhotoFile?.name || "La que se verá en el catálogo"}</small></span>
-                          <b>Elegir</b>
-                          <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file && validPhoto(file)) setMainPhotoFile(file); }} />
-                        </label>
+                          <span className="photoRowActions">
+                            {(mainPhotoFile || editingProduct?.imageUrl) && <button type="button" onClick={() => void adjustPhoto(mainPhotoFile, editingProduct?.imageUrl, { kind: "main" }, "Foto principal")}>Ajustar</button>}
+                            <label>Elegir<input type="file" accept="image/*" onChange={(event) => { choosePhoto(event.target.files?.[0], { kind: "main" }, "Foto principal"); event.currentTarget.value = ""; }} /></label>
+                          </span>
+                        </div>
                         <div className="colorPhotoList">
                           {[...new Set(productForm.colors.split(",").map((value) => value.trim()).filter(Boolean))].map((color) => {
                             const selectedFile = colorPhotoFiles[color];
-                            const existingUrl = products.find((entry) => entry.id === productForm.id)?.colorImages?.[color];
-                            return <label className="photoUploadRow" key={color}>
-                              {(selectedFile || existingUrl) ? <img src={selectedFile ? URL.createObjectURL(selectedFile) : existingUrl} alt={color} /> : <span className="photoPlaceholder"><span className="colorDot" data-color={color} /></span>}
+                            const existingUrl = editingProduct?.colorImages?.[color];
+                            return <div className="photoUploadRow" key={color}>
+                              {(selectedFile || existingUrl) ? <PhotoPreview file={selectedFile} url={existingUrl} alt={color} /> : <span className="photoPlaceholder"><span className="colorDot" data-color={color} /></span>}
                               <span><strong>{color}</strong><small>{selectedFile?.name || (existingUrl ? "Foto cargada" : "Sin foto propia")}</small></span>
-                              <b>Elegir</b>
-                              <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file && validPhoto(file)) setColorPhotoFiles((current) => ({ ...current, [color]: file })); }} />
-                            </label>;
+                              <span className="photoRowActions">
+                                {(selectedFile || existingUrl) && <button type="button" onClick={() => void adjustPhoto(selectedFile, existingUrl, { kind: "color", color }, `Foto ${color}`)}>Ajustar</button>}
+                                <label>Elegir<input type="file" accept="image/*" onChange={(event) => { choosePhoto(event.target.files?.[0], { kind: "color", color }, `Foto ${color}`); event.currentTarget.value = ""; }} /></label>
+                              </span>
+                            </div>;
                           })}
                         </div>
                       </div>
@@ -1379,6 +1445,7 @@ export default function StockApp({ supabaseUrl, supabasePublishableKey }: { supa
                   </section>
                 </div>
               )}
+              {photoEditor && <PhotoCropper file={photoEditor.file} title={photoEditor.title} onCancel={() => setPhotoEditor(null)} onSave={applyPhotoCrop} />}
               <div className="catalogGrid">
                 {products.map((product) => {
                   const total = product.variants.reduce((sum, variant) => sum + variant.onHand, 0);

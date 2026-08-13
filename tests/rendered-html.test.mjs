@@ -47,3 +47,19 @@ test("keeps the starter preview out of the finished application", async () => {
   assert.doesNotMatch(page, /SkeletonPreview/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
+
+test("provides an image cropper before product photos are uploaded", async () => {
+  const [stockApp, cropper, globals] = await Promise.all([
+    readFile(new URL("../app/stock-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/photo-cropper.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(stockApp, /<PhotoCropper/);
+  assert.match(stockApp, /adjustPhoto/);
+  assert.match(cropper, /Arrastrá la imagen para encuadrarla/);
+  assert.match(cropper, /type="range"/);
+  assert.match(cropper, /context\.rotate/);
+  assert.match(cropper, /1200, height: 900/);
+  assert.match(globals, /\.cropViewport/);
+});
